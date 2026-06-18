@@ -13,12 +13,6 @@ model_list:
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
 
-  - model_name: big-pickle
-    litellm_params:
-      model: openai/big-pickle
-      api_base: https://opencode.ai/zen/v1
-      api_key: os.environ/OPENCODE_API_KEY
-
   - model_name: claude-nemotron-3-ultra
     litellm_params:
       model: openai/nemotron-3-ultra-free

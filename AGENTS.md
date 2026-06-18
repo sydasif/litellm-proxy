@@ -46,7 +46,7 @@ Read `bifrost/config.json` for the full config. Key details:
 
 | Provider | RPM | Models                                                                                                    |
 | :------- | :-- | :-------------------------------------------------------------------------------------------------------- |
-| opencode | 30  | `big-pickle`, `mimo-v2.5-free`, `north-mini-code-free`, `nemotron-3-ultra-free`, `deepseek-v4-flash-free` |
+| opencode | 30  | `mimo-v2.5-free`, `north-mini-code-free`, `nemotron-3-ultra-free`, `deepseek-v4-flash-free` |
 | gemini   | 15  | `gemma-4-31b-it`                                                                                          |
 
 Request format: `<provider>/<model>` (e.g. `opencode/mimo-v2.5-free`).

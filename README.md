@@ -80,7 +80,7 @@ All provider and rate limit settings live in `bifrost/config.json`.
 
 | Provider | Models                                                                                                    | RPM |
 | :------- | :-------------------------------------------------------------------------------------------------------- | :-- |
-| OpenCode | `big-pickle`, `mimo-v2.5-free`, `north-mini-code-free`, `nemotron-3-ultra-free`, `deepseek-v4-flash-free` | 30  |
+|| OpenCode | `mimo-v2.5-free`, `north-mini-code-free`, `nemotron-3-ultra-free`, `deepseek-v4-flash-free` | 30  |
 | Gemini   | `gemma-4-31b-it`                                                                                          | 15  |
 
 ---
