@@ -1,0 +1,59 @@
+model_list:
+  - model_name: mimo-v2.5
+    litellm_params:
+      model: openai/mimo-v2.5-free
+      api_base: https://opencode.ai/zen/v1
+      api_key: os.environ/OPENCODE_API_KEY
+    model_info:
+      supports_vision: true
+
+  - model_name: deepseek-v4-flash
+    litellm_params:
+      model: openai/deepseek-v4-flash-free
+      api_base: https://opencode.ai/zen/v1
+      api_key: os.environ/OPENCODE_API_KEY
+
+  - model_name: big-pickle
+    litellm_params:
+      model: openai/big-pickle
+      api_base: https://opencode.ai/zen/v1
+      api_key: os.environ/OPENCODE_API_KEY
+
+  - model_name: claude-nemotron-3-ultra
+    litellm_params:
+      model: openai/nemotron-3-ultra-free
+      api_base: https://opencode.ai/zen/v1
+      api_key: os.environ/OPENCODE_API_KEY
+
+  - model_name: claude-gemma4-31b
+    litellm_params:
+      model: gemini/gemma-4-31b-it
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      supports_vision: true
+
+  - model_name: claude-glm-4.5-flash
+    litellm_params:
+      model: zai/glm-4.5-flash
+      api_key: os.environ/ZAI_API_KEY
+
+  # fallback models
+  - model_name: gemma4-26b
+    litellm_params:
+      model: gemini/gemma-4-26b-a4b-it
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      supports_vision: true
+
+  - model_name: gemini-3.1-flash
+    litellm_params:
+      model: gemini/gemini-3.1-flash-lite
+      api_key: os.environ/GEMINI_API_KEY
+
+litellm_settings:
+  drop_params: true
+  use_chat_completions_url_for_anthropic_messages: true
+
+  fallbacks:
+    - nemotron-3-ultra: ["gemma4-26b"]
+    - deepseek-v4-flash: ["gemini-3.1-flash"]

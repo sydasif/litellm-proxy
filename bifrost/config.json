@@ -1,0 +1,102 @@
+{
+  "$schema": "https://www.getbifrost.ai/schema",
+  "client": {
+    "enable_logging": true,
+    "compat": {
+      "should_drop_params": true
+    }
+  },
+  "providers": {
+    "opencode": {
+      "keys": [
+        {
+          "name": "opencode-key",
+          "value": "env.OPENCODE_API_KEY",
+          "models": [
+            "big-pickle",
+            "mimo-v2.5-free",
+            "north-mini-code-free",
+            "nemotron-3-ultra-free",
+            "deepseek-v4-flash-free"
+          ],
+          "weight": 1.0
+        }
+      ],
+      "network_config": {
+        "base_url": "https://opencode.ai/zen",
+        "default_request_timeout_in_seconds": 160,
+        "max_retries": 3
+      },
+      "custom_provider_config": {
+        "base_provider_type": "openai",
+        "allowed_requests": {
+          "chat_completion": true,
+          "chat_completion_stream": true,
+          "responses": true,
+          "responses_stream": true
+        }
+      }
+    },
+    "gemini": {
+      "keys": [
+        {
+          "name": "gemini-key-1",
+          "value": "env.GEMINI_API_KEY_1",
+          "models": [
+            "gemma-4-31b-it",
+            "gemma-4-26b-a4b-it",
+            "gemini-3.1-flash-lite"
+          ],
+          "weight": 0.5
+        },
+        {
+          "name": "gemini-key-2",
+          "value": "env.GEMINI_API_KEY_2",
+          "models": [
+            "gemma-4-31b-it",
+            "gemma-4-26b-a4b-it",
+            "gemini-3.1-flash-lite"
+          ],
+          "weight": 0.5
+        }
+      ],
+      "network_config": {
+        "default_request_timeout_in_seconds": 180,
+        "max_retries": 3
+      }
+    }
+  },
+  "governance": {
+    "virtual_keys": [
+      {
+        "id": "vk-default",
+        "name": "default",
+        "is_active": true,
+        "provider_configs": [
+          {
+            "id": 1,
+            "provider": "opencode",
+            "rate_limit_id": "rl-opencode"
+          },
+          {
+            "id": 2,
+            "provider": "gemini",
+            "rate_limit_id": "rl-gemini"
+          }
+        ]
+      }
+    ],
+    "rate_limits": [
+      {
+        "id": "rl-opencode",
+        "request_max_limit": 30,
+        "request_reset_duration": "1m"
+      },
+      {
+        "id": "rl-gemini",
+        "request_max_limit": 15,
+        "request_reset_duration": "1m"
+      }
+    ]
+  }
+}
