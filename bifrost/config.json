@@ -73,8 +73,8 @@
         "allowed_requests": {
           "chat_completion": true,
           "chat_completion_stream": true,
-          "responses": true,
-          "responses_stream": true
+          "responses": false,
+          "responses_stream": false
         }
       }
     }
