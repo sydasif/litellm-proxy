@@ -12,15 +12,13 @@
         {
           "name": "opencode-key",
           "value": "env.OPENCODE_API_KEY",
-          "models": [
-            "nemotron-3-ultra-free"
-          ],
+          "models": ["nemotron-3-ultra-free"],
           "weight": 1.0
         }
       ],
       "network_config": {
         "base_url": "https://opencode.ai/zen",
-        "default_request_timeout_in_seconds": 60,
+        "default_request_timeout_in_seconds": 90,
         "max_retries": 2
       },
       "custom_provider_config": {
@@ -49,7 +47,7 @@
         }
       ],
       "network_config": {
-        "default_request_timeout_in_seconds": 60,
+        "default_request_timeout_in_seconds": 90,
         "max_retries": 2
       }
     },
@@ -64,7 +62,7 @@
       ],
       "network_config": {
         "base_url": "https://apihub.agnes-ai.com",
-        "default_request_timeout_in_seconds": 60,
+        "default_request_timeout_in_seconds": 90,
         "max_retries": 2
       },
       "custom_provider_config": {
@@ -137,7 +135,7 @@
       },
       {
         "id": "rl-agnes",
-        "request_max_limit": 60,
+        "request_max_limit": 45,
         "request_reset_duration": "1m"
       }
     ]
