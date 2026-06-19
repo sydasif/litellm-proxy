@@ -79,6 +79,28 @@
       }
     }
   },
+  "vector_store": {
+    "enabled": true,
+    "type": "redis",
+    "config": {
+      "addr": "redis:6379"
+    }
+  },
+  "plugins": [
+    {
+      "enabled": true,
+      "name": "semantic_cache",
+      "config": {
+        "dimension": 1,
+        "ttl": "10m",
+        "cache_by_model": true,
+        "cache_by_provider": true,
+        "conversation_history_threshold": 3,
+        "vector_store_namespace": "BifrostCache",
+        "default_cache_key": "default"
+      }
+    }
+  ],
   "governance": {
     "virtual_keys": [
       {

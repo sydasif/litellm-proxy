@@ -1,4 +1,19 @@
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: bifrost-redis
+    expose:
+      - "6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 2
+    restart: unless-stopped
+
   bifrost:
     image: maximhq/bifrost
     container_name: bifrost
@@ -11,6 +26,9 @@ services:
     dns:
       - 8.8.8.8
       - 8.8.4.4
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "nc", "-z", "localhost", "8080"]
       interval: 10s
@@ -18,3 +36,6 @@ services:
       retries: 2
       start_period: 15s
     restart: unless-stopped
+
+volumes:
+  redis_data:
