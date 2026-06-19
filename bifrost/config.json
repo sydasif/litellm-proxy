@@ -21,7 +21,7 @@
       ],
       "network_config": {
         "base_url": "https://opencode.ai/zen",
-        "default_request_timeout_in_seconds": 30,
+        "default_request_timeout_in_seconds": 60,
         "max_retries": 2
       },
       "custom_provider_config": {
@@ -50,7 +50,7 @@
         }
       ],
       "network_config": {
-        "default_request_timeout_in_seconds": 30,
+        "default_request_timeout_in_seconds": 60,
         "max_retries": 2
       }
     },
@@ -65,7 +65,7 @@
       ],
       "network_config": {
         "base_url": "https://apihub.agnes-ai.com",
-        "default_request_timeout_in_seconds": 30,
+        "default_request_timeout_in_seconds": 60,
         "max_retries": 2
       },
       "custom_provider_config": {
