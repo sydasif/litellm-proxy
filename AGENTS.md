@@ -32,7 +32,7 @@ No Python code lives in this repo.
 ## Setup Gotchas
 
 - **DNS fix required**: `dns: [8.8.8.8, 8.8.4.4]` in docker-compose.yml — without it Bifrost can't resolve provider APIs.
-- **Two API keys** needed (set in `.env`): `OPENCODE_API_KEY`, `GEMINI_API_KEY_1`, `GEMINI_API_KEY_2`.
+- **Three API keys** needed (set in `.env`): `OPENCODE_API_KEY`, `GEMINI_API_KEY_1`, `GEMINI_API_KEY_2`, `AGNES_API_KEY`.
 - **Config is mounted read-only** (`:ro`). Edit `bifrost/config.json`, then `docker compose down && docker compose up -d` to apply (full recreate, not restart — config is loaded at startup).
 - **OpenCode Zen base_url** must be `https://opencode.ai/zen` (not `/zen/v1`) — Bifrost appends `/v1/chat/completions` internally.
 - **Rate limits** are in the `governance` section of `bifrost/config.json`.
@@ -44,12 +44,13 @@ No Python code lives in this repo.
 
 Read `bifrost/config.json` for the full config. Key details:
 
-| Provider | RPM | Models                                                                                                    |
-| :------- | :-- | :-------------------------------------------------------------------------------------------------------- |
+| Provider | RPM | Models                        |
+| :------- | :-: | :---------------------------- |
 | opencode | 30  | `mimo-v2.5-free`, `north-mini-code-free`, `nemotron-3-ultra-free`, `deepseek-v4-flash-free` |
-| gemini   | 15  | `gemma-4-31b-it`                                                                                          |
+| gemini   | 15  | `gemma-4-31b-it`              |
+| agnes    | 60  | `agnes-2.0-flash`             |
 
-Request format: `<provider>/<model>` (e.g. `opencode/mimo-v2.5-free`).
+Request format: `<provider>/<model>` (e.g. `opencode/mimo-v2.5-free`, `agnes/agnes-2.0-flash`).
 
 ---
 

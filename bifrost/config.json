@@ -54,6 +54,30 @@
         "default_request_timeout_in_seconds": 180,
         "max_retries": 3
       }
+    },
+    "agnes": {
+      "keys": [
+        {
+          "name": "agnes-key",
+          "value": "env.AGNES_API_KEY",
+          "models": ["agnes-2.0-flash"],
+          "weight": 1.0
+        }
+      ],
+      "network_config": {
+        "base_url": "https://apihub.agnes-ai.com",
+        "default_request_timeout_in_seconds": 120,
+        "max_retries": 3
+      },
+      "custom_provider_config": {
+        "base_provider_type": "openai",
+        "allowed_requests": {
+          "chat_completion": true,
+          "chat_completion_stream": true,
+          "responses": true,
+          "responses_stream": true
+        }
+      }
     }
   },
   "governance": {
@@ -72,6 +96,11 @@
             "id": 2,
             "provider": "gemini",
             "rate_limit_id": "rl-gemini"
+          },
+          {
+            "id": 3,
+            "provider": "agnes",
+            "rate_limit_id": "rl-agnes"
           }
         ]
       }
@@ -85,6 +114,11 @@
       {
         "id": "rl-gemini",
         "request_max_limit": 15,
+        "request_reset_duration": "1m"
+      },
+      {
+        "id": "rl-agnes",
+        "request_max_limit": 60,
         "request_reset_duration": "1m"
       }
     ]
