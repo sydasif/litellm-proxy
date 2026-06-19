@@ -96,8 +96,7 @@
         "cache_by_model": true,
         "cache_by_provider": true,
         "conversation_history_threshold": 3,
-        "vector_store_namespace": "BifrostCache",
-        "default_cache_key": "default"
+        "vector_store_namespace": "BifrostCache"
       }
     }
   ],

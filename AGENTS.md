@@ -20,9 +20,15 @@ docker compose pull && docker compose up -d   # Update image + restart
 
 ## Architecture
 
-Single Docker service (Bifrost, Go). Two config files:
+Two Docker services:
 
-- `bifrost/config.json` — providers, rate limits, governance (source of truth)
+- **Bifrost** (Go) — AI proxy gateway
+- **Redis** (Redis Stack) — vector store for semantic caching
+
+Three config files:
+
+- `bifrost/config.json` — providers, rate limits, governance, caching (source of truth)
+- `docker-compose.yml` — service definitions
 - `litellm/config.yaml` — LiteLLM backup config
 
 No Python code lives in this repo.
@@ -37,6 +43,9 @@ No Python code lives in this repo.
 - **OpenCode Zen base_url** must be `https://opencode.ai/zen` (not `/zen/v1`) — Bifrost appends `/v1/chat/completions` internally.
 - **Rate limits** are in the `governance` section of `bifrost/config.json`.
 - **Health check** is TCP socket (`nc -z`) — no API calls, no quota burn.
+- **Redis** starts first (Bifrost `depends_on` Redis with `condition: service_healthy`). Bifrost crashes immediately if Redis isn't ready.
+- **Semantic caching** is enabled in direct-only mode (exact-match). Clients opt-in via `x-bf-cache-key` header. Without this header, requests bypass the cache entirely.
+- **Redis persistence** is enabled (`appendonly yes`) with 256mb maxmemory LRU eviction. Cache entries expire after 10m TTL.
 
 ---
 
