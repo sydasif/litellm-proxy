@@ -13,8 +13,7 @@
           "name": "opencode-key",
           "value": "env.OPENCODE_API_KEY",
           "models": [
-            "nemotron-3-ultra-free",
-            "deepseek-v4-flash-free"
+            "nemotron-3-ultra-free"
           ],
           "weight": 1.0
         }
