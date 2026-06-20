@@ -1,0 +1,42 @@
+services:
+  redis:
+    image: redis/redis-stack-server:7.4.0-v1
+    container_name: bifrost-redis
+    expose:
+      - "6379"
+    volumes:
+      - redis_data:/data
+    command: redis-stack-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 2
+      start_period: 10s
+    restart: unless-stopped
+
+  bifrost:
+    image: maximhq/bifrost
+    container_name: bifrost
+    ports:
+      - "4000:8080"
+    volumes:
+      - ./bifrost/config.json:/app/data/config.json:ro
+    env_file:
+      - ./.env
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8080"]
+      interval: 10s
+      timeout: 3s
+      retries: 2
+      start_period: 15s
+    restart: unless-stopped
+
+volumes:
+  redis_data:

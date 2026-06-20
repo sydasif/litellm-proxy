@@ -1,97 +1,143 @@
 # AGENTS.md
 
 **Role:** Proxy Gateway Operator
-**Mandate:** Deploy and maintain the Bifrost proxy gateway for Claude Code (LiteLLM as backup).
+**Mandate:** Deploy and maintain either Bifrost or LiteLLM proxy gateway for Claude Code.
 
 ---
 
-## Commands
+## Quick Reference
 
 ```bash
-docker compose up -d                          # Start (detached)
-docker compose down                            # Stop
-docker compose logs -f                        # Tail logs
-docker compose restart                        # Restart services
-curl http://localhost:4000/health             # Health check
-docker compose pull && docker compose up -d   # Update image + restart
+docker compose up -d                # Start (detached)
+docker compose down                  # Stop
+docker compose logs -f              # Tail logs
+docker compose restart               # Restart services
+curl http://localhost:4000/         # Health / models check
+docker compose pull && docker compose up -d  # Update image + restart
 ```
 
 ---
 
 ## Architecture
 
-Two Docker services:
+Two compose files, mutually exclusive (only one active at a time):
 
-- **Bifrost** (Go) — AI proxy gateway
-- **Redis** (Redis Stack) — vector store for semantic caching
-
-Three config files:
-
-- `bifrost/config.json` — providers, rate limits, governance, caching (source of truth)
-- `docker-compose.yml` — service definitions
-- `litellm/config.yaml` — LiteLLM backup config
-
-No Python code lives in this repo.
-
----
-
-## Setup Gotchas
-
-- **DNS fix required**: `dns: [8.8.8.8, 8.8.4.4]` in docker-compose.yml — without it Bifrost can't resolve provider APIs.
-- **Three API keys** needed (set in `.env`): `OPENCODE_API_KEY`, `GEMINI_API_KEY_1`, `GEMINI_API_KEY_2`, `AGNES_API_KEY`.
-- **Config is mounted read-only** (`:ro`). Edit `bifrost/config.json`, then `docker compose down && docker compose up -d` to apply (full recreate, not restart — config is loaded at startup).
-- **OpenCode Zen base_url** must be `https://opencode.ai/zen` (not `/zen/v1`) — Bifrost appends `/v1/chat/completions` internally.
-- **Rate limits** are in the `governance` section of `bifrost/config.json`.
-- **Health check** is TCP socket (`nc -z`) — no API calls, no quota burn.
-- **Redis** starts first (Bifrost `depends_on` Redis with `condition: service_healthy`). Bifrost crashes immediately if Redis isn't ready.
-- **Semantic caching** is enabled in direct-only mode (exact-match). Clients opt-in via `x-bf-cache-key` header. Without this header, requests bypass the cache entirely.
-- **Redis persistence** is enabled (`appendonly yes`) with 256mb maxmemory LRU eviction. Cache entries expire after 10m TTL.
+| Aspect      | Bifrost (`docker-compose.bifrost.yml`) | LiteLLM (`docker-compose.litellm.yml`) |
+| ----------- | -------------------------------------- | -------------------------------------- |
+| Runtime     | Go binary                              | Python                                 |
+| Containers  | Bifrost + Redis (2)                    | LiteLLM (1)                            |
+| Port        | `4000:8080`                            | `4000:4000`                            |
+| Cache       | Redis semantic cache (10m TTL)         | None                                   |
+| DNS         | Explicit `8.8.8.8, 8.8.4.4`            | None                                   |
+| Healthcheck | TCP `nc -z localhost 8080`             | None                                   |
+| Config      | `bifrost/config.json`                  | `litellm/config.yaml`                  |
 
 ---
 
 ## Provider Configuration
 
-Read `bifrost/config.json` for the full config. Key details:
+### Bifrost — `bifrost/config.json`
 
-| Provider | Timeout | Models                        |
-| :------- | :------ | :---------------------------- |
-| opencode | 300s    | `nemotron-3-ultra-free`       |
-| gemini   | 120s    | `gemma-4-31b-it`              |
-| agnes    | 180s    | `agnes-2.0-flash`             |
+| Provider | Timeout | Models                  | Keys                             |
+| :------- | :------ | :---------------------- | :------------------------------- |
+| opencode | 300s    | `nemotron-3-ultra-free` | 1 key, weight 1.0                |
+| gemini   | 120s    | `gemma-4-31b-it`        | 2 keys, load-balanced (0.5 each) |
+| agnes    | 180s    | `agnes-2.0-flash`       | 1 key, weight 1.0                |
 
-**Rate limits:** Removed for all providers.
+**Request format:** `<provider>/<model>` (e.g. `opencode/nemotron-3-ultra-free`, `agnes/agnes-2.0-flash`).
 
-Request format: `<provider>/<model>` (e.g. `opencode/nemotron-3-ultra-free`, `agnes/agnes-2.0-flash`).
+**Gotchas:**
+
+- Config is mounted read-only (`:ro`). Edit then `docker compose down && up -d` (not restart).
+- OpenCode base_url: `https://opencode.ai/zen` (no `/v1` — Bifrost appends it internally).
+- Redis must be healthy before Bifrost starts — crashes immediately if Redis isn't ready.
+- Semantic caching: exact-match only, opt-in via `x-bf-cache-key` header.
+- Health check is TCP socket (`nc -z`) — no quota burn.
+
+### LiteLLM — `litellm/config.yaml`
+
+| Model ID           | Backend                        | Timeout | Keys                                                |
+| :----------------- | :----------------------------- | :------ | :-------------------------------------------------- |
+| `nemotron-3-ultra` | opencode/nemotron-3-ultra-free | 300s    | OPENCODE_API_KEY                                    |
+| `gemma4-31b`       | gemini/gemma-4-31b-it          | 120s    | GEMINI_API_KEY_1 + GEMINI_API_KEY_2 (load-balanced) |
+| `agnes-2.0-flash`  | openai/agnes-2.0-flash         | 180s    | AGNES_API_KEY                                       |
+
+**Request format:** Use the Model ID directly (e.g. `gemma4-31b`, `nemotron-3-ultra`).
+
+**Features:**
+
+- `drop_params: true` — drops unsupported params for compatibility.
+- `num_retries: 3` — auto-retry across load-balanced keys on failure.
+- `routing_strategy: simple-shuffle` — random distribution across duplicate keys.
+
+---
+
+## Switching Between Proxies
+
+Each switch requires **both** a compose file swap and a `.profile` update.
+
+### `.profile` Values by Proxy
+
+| Variable                         | Bifrost                           | LiteLLM                 |
+| -------------------------------- | --------------------------------- | ----------------------- |
+| `ANTHROPIC_BASE_URL`             | `http://localhost:4000/anthropic` | `http://localhost:4000` |
+| `ANTHROPIC_DEFAULT_OPUS_MODEL`   | `opencode/nemotron-3-ultra-free`  | `nemotron-3-ultra`      |
+| `ANTHROPIC_DEFAULT_SONNET_MODEL` | `gemini/gemma-4-31b-it`           | `gemma4-31b`            |
+| `ANTHROPIC_DEFAULT_HAIKU_MODEL`  | `agnes/agnes-2.0-flash`           | `agnes-2.0-flash`       |
+
+### Bifrost → LiteLLM
+
+```bash
+# 1. Stop current stack
+docker compose down
+
+# 2. Swap compose files
+mv docker-compose.yml docker-compose.bifrost.yml
+mv docker-compose.litellm.yml docker-compose.yml
+
+# 3. Update ~/.profile (LiteLLM values)
+sed -i 's|ANTHROPIC_BASE_URL=http://localhost:4000/anthropic|ANTHROPIC_BASE_URL=http://localhost:4000|' ~/.profile
+sed -i 's|ANTHROPIC_DEFAULT_OPUS_MODEL=.*|ANTHROPIC_DEFAULT_OPUS_MODEL=nemotron-3-ultra|' ~/.profile
+sed -i 's|ANTHROPIC_DEFAULT_SONNET_MODEL=.*|ANTHROPIC_DEFAULT_SONNET_MODEL=gemma4-31b|' ~/.profile
+sed -i 's|ANTHROPIC_DEFAULT_HAIKU_MODEL=.*|ANTHROPIC_DEFAULT_HAIKU_MODEL=agnes-2.0-flash|' ~/.profile
+
+# 4. Start new stack
+docker compose up -d
+```
+
+### LiteLLM → Bifrost
+
+```bash
+# 1. Stop current stack
+docker compose down
+
+# 2. Swap compose files
+mv docker-compose.yml docker-compose.litellm.yml
+mv docker-compose.bifrost.yml docker-compose.yml
+
+# 3. Update ~/.profile (Bifrost values)
+sed -i 's|ANTHROPIC_BASE_URL=http://localhost:4000|ANTHROPIC_BASE_URL=http://localhost:4000/anthropic|' ~/.profile
+sed -i 's|ANTHROPIC_DEFAULT_OPUS_MODEL=.*|ANTHROPIC_DEFAULT_OPUS_MODEL=opencode/nemotron-3-ultra-free|' ~/.profile
+sed -i 's|ANTHROPIC_DEFAULT_SONNET_MODEL=.*|ANTHROPIC_DEFAULT_SONNET_MODEL=gemini/gemma-4-31b-it|' ~/.profile
+sed -i 's|ANTHROPIC_DEFAULT_HAIKU_MODEL=.*|ANTHROPIC_DEFAULT_HAIKU_MODEL=agnes/agnes-2.0-flash|' ~/.profile
+
+# 4. Start new stack
+docker compose up -d
+```
+
+After switching, `source ~/.profile` or open a new shell before running `claude`.
 
 ---
 
 ## Failure Handling
 
-| Symptom                   | Fix                                                                        |
-| ------------------------- | -------------------------------------------------------------------------- |
-| `address already in use`  | `docker ps` — check for leftover containers on port 4000                   |
-| `401` / `Invalid API key` | Verify the required key is set in `.env`                                   |
-| `503` on `/health`        | `docker compose logs -f` — check Bifrost startup                           |
-| `model not found`         | Update model names in `bifrost/config.json`                                |
-| Config not applied        | Use `docker compose down && up -d` (not restart) — config loads at startup |
-
----
-
-## Switching to LiteLLM (Backup)
-
-```bash
-mv docker-compose.yml docker-compose.bifrost.yml
-mv docker-compose.litellm.yml docker-compose.yml
-docker compose down && docker compose up -d
-```
-
-Switch back:
-
-```bash
-mv docker-compose.yml docker-compose.litellm.yml
-mv docker-compose.bifrost.yml docker-compose.yml
-docker compose down && docker compose up -d
-```
+| Symptom                   | Fix                                                                    |
+| ------------------------- | ---------------------------------------------------------------------- |
+| `address already in use`  | `docker ps` — leftover containers on port 4000                         |
+| `401` / `Invalid API key` | Verify the required keys are set in `.env`                             |
+| Service won't start       | `docker compose logs -f` — check startup logs                          |
+| `model not found`         | Update model names in the active config file                           |
+| Config not applied        | `docker compose down && up -d` (not restart) — config loads at startup |
 
 ---
 

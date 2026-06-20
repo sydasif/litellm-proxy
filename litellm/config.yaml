@@ -12,6 +12,12 @@ model_list:
       api_key: os.environ/GEMINI_API_KEY_1
       timeout: 120
 
+  - model_name: gemma4-31b
+    litellm_params:
+      model: gemini/gemma-4-31b-it
+      api_key: os.environ/GEMINI_API_KEY_2
+      timeout: 120
+
   - model_name: agnes-2.0-flash
     litellm_params:
       model: openai/agnes-2.0-flash
@@ -22,3 +28,7 @@ model_list:
 litellm_settings:
   drop_params: true
   use_chat_completions_url_for_anthropic_messages: true
+
+router_settings:
+  num_retries: 3
+  routing_strategy: simple-shuffle
