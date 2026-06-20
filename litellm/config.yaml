@@ -11,8 +11,6 @@ model_list:
       model: gemini/gemma-4-31b-it
       api_key: os.environ/GEMINI_API_KEY_1
       timeout: 120
-    model_info:
-      supports_vision: true
 
   - model_name: agnes-2.0-flash
     litellm_params:
