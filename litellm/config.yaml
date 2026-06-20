@@ -14,12 +14,7 @@ model_list:
   - model_name: gemma-4-31b
     litellm_params:
       model: gemini/gemma-4-31b-it
-      api_key: os.environ/GEMINI_API_KEY_1
-
-  - model_name: gemma-4-31b
-    litellm_params:
-      model: gemini/gemma-4-31b-it
-      api_key: os.environ/GEMINI_API_KEY_2
+      api_key: os.environ/GEMINI_API_KEY
 
 litellm_settings:
   drop_params: true
