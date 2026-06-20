@@ -47,7 +47,7 @@
         }
       ],
       "network_config": {
-        "default_request_timeout_in_seconds": 90,
+        "default_request_timeout_in_seconds": 60,
         "max_retries": 2
       }
     },
@@ -106,38 +106,19 @@
         "provider_configs": [
           {
             "id": 1,
-            "provider": "opencode",
-            "rate_limit_id": "rl-opencode"
+            "provider": "opencode"
           },
           {
             "id": 2,
-            "provider": "gemini",
-            "rate_limit_id": "rl-gemini"
+            "provider": "gemini"
           },
           {
             "id": 3,
-            "provider": "agnes",
-            "rate_limit_id": "rl-agnes"
+            "provider": "agnes"
           }
         ]
       }
     ],
-    "rate_limits": [
-      {
-        "id": "rl-opencode",
-        "request_max_limit": 30,
-        "request_reset_duration": "1m"
-      },
-      {
-        "id": "rl-gemini",
-        "request_max_limit": 15,
-        "request_reset_duration": "1m"
-      },
-      {
-        "id": "rl-agnes",
-        "request_max_limit": 45,
-        "request_reset_duration": "1m"
-      }
-    ]
+    "rate_limits": []
   }
 }

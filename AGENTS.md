@@ -53,13 +53,15 @@ No Python code lives in this repo.
 
 Read `bifrost/config.json` for the full config. Key details:
 
-| Provider | RPM | Models                        |
-| :------- | :-: | :---------------------------- |
-| opencode | 30  | `north-mini-code-free`, `nemotron-3-ultra-free`, `deepseek-v4-flash-free` |
-| gemini   | 15  | `gemma-4-31b-it`              |
-| agnes    | 60  | `agnes-2.0-flash`             |
+| Provider | Timeout | Models                        |
+| :------- | :------ | :---------------------------- |
+| opencode | 90s     | `nemotron-3-ultra-free`       |
+| gemini   | 60s     | `gemma-4-31b-it`              |
+| agnes    | 90s     | `agnes-2.0-flash`             |
 
-Request format: `<provider>/<model>` (e.g. `opencode/mimo-v2.5-free`, `agnes/agnes-2.0-flash`).
+**Rate limits:** Removed for all providers.
+
+Request format: `<provider>/<model>` (e.g. `opencode/nemotron-3-ultra-free`, `agnes/agnes-2.0-flash`).
 
 ---
 
