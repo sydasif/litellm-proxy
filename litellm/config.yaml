@@ -4,13 +4,22 @@ model_list:
       model: openai/nemotron-3-ultra-free
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
+      timeout: 300
 
   - model_name: gemma4-31b
     litellm_params:
       model: gemini/gemma-4-31b-it
-      api_key: os.environ/GEMINI_API_KEY
+      api_key: os.environ/GEMINI_API_KEY_1
+      timeout: 120
     model_info:
       supports_vision: true
+
+  - model_name: agnes-2.0-flash
+    litellm_params:
+      model: openai/agnes-2.0-flash
+      api_base: https://apihub.agnes-ai.com/v1
+      api_key: os.environ/AGNES_API_KEY
+      timeout: 180
 
 litellm_settings:
   drop_params: true
