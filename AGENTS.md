@@ -55,9 +55,9 @@ Read `bifrost/config.json` for the full config. Key details:
 
 | Provider | Timeout | Models                        |
 | :------- | :------ | :---------------------------- |
-| opencode | 90s     | `nemotron-3-ultra-free`       |
-| gemini   | 60s     | `gemma-4-31b-it`              |
-| agnes    | 90s     | `agnes-2.0-flash`             |
+| opencode | 300s    | `nemotron-3-ultra-free`       |
+| gemini   | 120s    | `gemma-4-31b-it`              |
+| agnes    | 180s    | `agnes-2.0-flash`             |
 
 **Rate limits:** Removed for all providers.
 
