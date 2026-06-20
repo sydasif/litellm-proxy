@@ -56,18 +56,19 @@ Two compose files, mutually exclusive (only one active at a time):
 
 ### LiteLLM — `litellm/config.yaml`
 
-| Model ID           | Backend                        | Timeout | Keys                                                |
-| :----------------- | :----------------------------- | :------ | :-------------------------------------------------- |
-| `nemotron-3-ultra` | opencode/nemotron-3-ultra-free | 300s    | OPENCODE_API_KEY                                    |
-| `gemma4-31b`       | gemini/gemma-4-31b-it          | 120s    | GEMINI_API_KEY_1 + GEMINI_API_KEY_2 (load-balanced) |
-| `agnes-2.0-flash`  | openai/agnes-2.0-flash         | 180s    | AGNES_API_KEY                                       |
+| Model ID            | Backend                         | Timeout | Keys                                                |
+| :------------------ | :------------------------------ | :------ | :-------------------------------------------------- |
+| `nemotron-3-ultra`  | opencode/nemotron-3-ultra-free  | 300s    | OPENCODE_API_KEY                                    |
+| `gemma-4-31b`       | gemini/gemma-4-31b-it           | 120s    | GEMINI_API_KEY_1 + GEMINI_API_KEY_2 (load-balanced) |
+| `deepseek-v4-flash` | opencode/deepseek-v4-flash-free | 300s    | OPENCODE_API_KEY                                    |
 
-**Request format:** Use the Model ID directly (e.g. `gemma4-31b`, `nemotron-3-ultra`).
+**Request format:** Use the Model ID directly (e.g. `gemma-4-31b`, `nemotron-3-ultra`).
 
 **Features:**
 
 - `drop_params: true` — drops unsupported params for compatibility.
-- `num_retries: 3` — auto-retry across load-balanced keys on failure.
+- `use_chat_completions_url_for_anthropic_messages: true` — routes upstream via `/v1/chat/completions` for all providers.
+- `num_retries: 0` — no auto-retry.
 - `routing_strategy: simple-shuffle` — random distribution across duplicate keys.
 
 ---
@@ -82,8 +83,8 @@ Each switch requires **both** a compose file swap and a `.profile` update.
 | -------------------------------- | --------------------------------- | ----------------------- |
 | `ANTHROPIC_BASE_URL`             | `http://localhost:4000/anthropic` | `http://localhost:4000` |
 | `ANTHROPIC_DEFAULT_OPUS_MODEL`   | `opencode/nemotron-3-ultra-free`  | `nemotron-3-ultra`      |
-| `ANTHROPIC_DEFAULT_SONNET_MODEL` | `gemini/gemma-4-31b-it`           | `gemma4-31b`            |
-| `ANTHROPIC_DEFAULT_HAIKU_MODEL`  | `agnes/agnes-2.0-flash`           | `agnes-2.0-flash`       |
+| `ANTHROPIC_DEFAULT_SONNET_MODEL` | `gemini/gemma-4-31b-it`           | `gemma-4-31b`           |
+| `ANTHROPIC_DEFAULT_HAIKU_MODEL`  | `agnes/agnes-2.0-flash`           | `deepseek-v4-flash`     |
 
 ### Bifrost → LiteLLM
 
@@ -98,8 +99,8 @@ mv docker-compose.litellm.yml docker-compose.yml
 # 3. Update ~/.profile (LiteLLM values)
 sed -i 's|ANTHROPIC_BASE_URL=http://localhost:4000/anthropic|ANTHROPIC_BASE_URL=http://localhost:4000|' ~/.profile
 sed -i 's|ANTHROPIC_DEFAULT_OPUS_MODEL=.*|ANTHROPIC_DEFAULT_OPUS_MODEL=nemotron-3-ultra|' ~/.profile
-sed -i 's|ANTHROPIC_DEFAULT_SONNET_MODEL=.*|ANTHROPIC_DEFAULT_SONNET_MODEL=gemma4-31b|' ~/.profile
-sed -i 's|ANTHROPIC_DEFAULT_HAIKU_MODEL=.*|ANTHROPIC_DEFAULT_HAIKU_MODEL=agnes-2.0-flash|' ~/.profile
+sed -i 's|ANTHROPIC_DEFAULT_SONNET_MODEL=.*|ANTHROPIC_DEFAULT_SONNET_MODEL=gemma-4-31b|' ~/.profile
+sed -i 's|ANTHROPIC_DEFAULT_HAIKU_MODEL=.*|ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-v4-flash|' ~/.profile
 
 # 4. Start new stack
 docker compose up -d
