@@ -83,11 +83,11 @@ Config lives in `litellm/config.yaml`.
 
 ### Models
 
-| Model ID            | LiteLLM Model                   | Base URL                         | Timeout | Keys               |
-| :------------------ | :------------------------------ | :------------------------------- | :------ | :----------------- |
-| `mimo-v2.5`         | `openai/mimo-v2.5-free`         | `https://opencode.ai/zen/v1`     | 300s    | `OPENCODE_API_KEY` |
-| `deepseek-v4-flash` | `openai/deepseek-v4-flash-free` | `https://opencode.ai/zen/v1`     | 300s    | `OPENCODE_API_KEY` |
-| `agnes-2.0-flash`   | `openai/agnes-2.0-flash`        | `https://apihub.agnes-ai.com/v1` | 300s    | `AGNES_API_KEY`    |
+| Model ID            | LiteLLM Model                   | Base URL                         | RPM    | Keys               |
+| :------------------ | :------------------------------ | :------------------------------- | :----- | :----------------- |
+| `mimo-v2.5`         | `openai/mimo-v2.5-free`         | `https://opencode.ai/zen/v1`     | 30 rpm | `OPENCODE_API_KEY` |
+| `deepseek-v4-flash` | `openai/deepseek-v4-flash-free` | `https://opencode.ai/zen/v1`     | 30 rpm | `OPENCODE_API_KEY` |
+| `agnes-2.0-flash`   | `openai/agnes-2.0-flash`        | `https://apihub.agnes-ai.com/v1` | 30 rpm | `AGNES_API_KEY`    |
 
 **Request format:** Use the Model ID directly (e.g. `mimo-v2.5`, `agnes-2.0-flash`).
 
