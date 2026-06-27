@@ -24,11 +24,11 @@ docker compose pull && docker compose up -d  # Update image + restart
 
 | Model ID           | Backend                                      | Timeout | Keys             |
 | :----------------- | :------------------------------------------- | :------ | :--------------- |
-| `nemotron-3-super` | nvidia_nim/nvidia/nemotron-3-super-120b-a12b | 300s    | NVIDIA_API_KEY   |
+| `qwen3.5` | nvidia_nim/qwen/qwen3.5-122b-a10b | 300s    | NVIDIA_API_KEY   |
 | `agnes-2.0-flash`  | openai/agnes-2.0-flash                       | 120s    | AGNES_API_KEY    |
 | `mimo-v2.5`        | openai/mimo-v2.5-free                        | 120s    | OPENCODE_API_KEY |
 
-**Request format:** Use the Model ID directly (e.g. `nemotron-3-super`, `agnes-2.0-flash`).
+**Request format:** Use the Model ID directly (e.g. `qwen3.5`, `agnes-2.0-flash`).
 
 **Features:**
 
@@ -44,7 +44,7 @@ docker compose pull && docker compose up -d  # Update image + restart
 | Variable                         | Value                   |
 | -------------------------------- | ----------------------- |
 | `ANTHROPIC_BASE_URL`             | `http://localhost:4000` |
-| `ANTHROPIC_DEFAULT_OPUS_MODEL`   | `nemotron-3-super`      |
+| `ANTHROPIC_DEFAULT_OPUS_MODEL`   | `qwen3.5`         |
 | `ANTHROPIC_DEFAULT_SONNET_MODEL` | `agnes-2.0-flash`       |
 | `ANTHROPIC_DEFAULT_HAIKU_MODEL`  | `mimo-v2.5`             |
 

@@ -86,7 +86,7 @@ Config lives in `litellm/config.yaml`.
 
 | Model ID           | LiteLLM Model                                  | Base URL                              | RPM     | Keys               |
 | :----------------- | :--------------------------------------------- | :------------------------------------ | :------ | :----------------- |
-| `nemotron-3-super` | `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` | `https://integrate.api.nvidia.com/v1` | 300 rpm | `NVIDIA_API_KEY`   |
+| `qwen3.5` | `nvidia_nim/qwen/qwen3.5-122b-a10b` | `https://integrate.api.nvidia.com/v1` | 300 rpm | `NVIDIA_API_KEY`   |
 | `agnes-2.0-flash`  | `openai/agnes-2.0-flash`                       | `https://apihub.agnes-ai.com/v1`      | 30 rpm  | `AGNES_API_KEY`    |
 | `mimo-v2.5`        | `openai/mimo-v2.5-free`                        | `https://opencode.ai/zen/v1`          | 30 rpm  | `OPENCODE_API_KEY` |
 
@@ -109,7 +109,7 @@ Set these in `~/.profile` (or equivalent):
 
 ```bash
 export ANTHROPIC_BASE_URL=http://localhost:4000
-export ANTHROPIC_DEFAULT_OPUS_MODEL=nemotron-3-super
+export ANTHROPIC_DEFAULT_OPUS_MODEL=qwen3.5
 export ANTHROPIC_DEFAULT_SONNET_MODEL=agnes-2.0-flash
 export ANTHROPIC_DEFAULT_HAIKU_MODEL=mimo-v2.5
 ```
