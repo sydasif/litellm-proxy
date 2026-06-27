@@ -12,7 +12,7 @@ A proxy gateway that routes **Claude Code** through **LiteLLM** (Python) to mult
 ## Features
 
 - **Single proxy**: LiteLLM with official Docker image, load-balanced routing
-- **Multi-provider routing**: OpenCode Zen and Agnes AI through a single `localhost:4000` endpoint
+- **Multi-provider routing**: NVIDIA NIM, OpenCode Zen, and Agnes AI through a single `localhost:4000` endpoint
 - **Load balancing**: Multiple API keys per provider with `simple-shuffle` strategy
 - **Parameter normalization**: `drop_params: true` drops unsupported params for cross-provider compatibility
 - **Anthropic message routing**: `use_chat_completions_url_for_anthropic_messages: true` routes all providers via `/v1/chat/completions`
@@ -58,8 +58,9 @@ Required keys:
 
 | Key                | Purpose                             |
 | ------------------ | ----------------------------------- |
-| `OPENCODE_API_KEY` | OpenCode Zen backend authentication |
+| `NVIDIA_API_KEY`   | NVIDIA NIM backend authentication   |
 | `AGNES_API_KEY`    | Agnes AI backend authentication     |
+| `OPENCODE_API_KEY` | OpenCode Zen backend authentication |
 
 ### 2. Deploy
 
@@ -83,11 +84,11 @@ Config lives in `litellm/config.yaml`.
 
 ### Models
 
-| Model ID            | LiteLLM Model                   | Base URL                         | RPM    | Keys               |
-| :------------------ | :------------------------------ | :------------------------------- | :----- | :----------------- |
-| `mimo-v2.5`         | `openai/mimo-v2.5-free`         | `https://opencode.ai/zen/v1`     | 30 rpm | `OPENCODE_API_KEY` |
-| `deepseek-v4-flash` | `openai/deepseek-v4-flash-free` | `https://opencode.ai/zen/v1`     | 30 rpm | `OPENCODE_API_KEY` |
-| `agnes-2.0-flash`   | `openai/agnes-2.0-flash`        | `https://apihub.agnes-ai.com/v1` | 30 rpm | `AGNES_API_KEY`    |
+| Model ID           | LiteLLM Model                                  | Base URL                              | RPM     | Keys               |
+| :----------------- | :--------------------------------------------- | :------------------------------------ | :------ | :----------------- |
+| `nemotron-3-super` | `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` | `https://integrate.api.nvidia.com/v1` | 300 rpm | `NVIDIA_API_KEY`   |
+| `agnes-2.0-flash`  | `openai/agnes-2.0-flash`                       | `https://apihub.agnes-ai.com/v1`      | 30 rpm  | `AGNES_API_KEY`    |
+| `mimo-v2.5`        | `openai/mimo-v2.5-free`                        | `https://opencode.ai/zen/v1`          | 30 rpm  | `OPENCODE_API_KEY` |
 
 **Request format:** Use the Model ID directly (e.g. `mimo-v2.5`, `agnes-2.0-flash`).
 
@@ -108,9 +109,9 @@ Set these in `~/.profile` (or equivalent):
 
 ```bash
 export ANTHROPIC_BASE_URL=http://localhost:4000
-export ANTHROPIC_DEFAULT_OPUS_MODEL=mimo-v2.5
+export ANTHROPIC_DEFAULT_OPUS_MODEL=nemotron-3-super
 export ANTHROPIC_DEFAULT_SONNET_MODEL=agnes-2.0-flash
-export ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-v4-flash
+export ANTHROPIC_DEFAULT_HAIKU_MODEL=mimo-v2.5
 ```
 
 After editing, `source ~/.profile` or open a new shell before running `claude`.
