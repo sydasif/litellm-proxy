@@ -1,7 +1,7 @@
 model_list:
-  - model_name: qwen3.5
+  - model_name: minimax-m2.7
     litellm_params:
-      model: nvidia_nim/qwen/qwen3.5-122b-a10b
+      model: nvidia_nim/minimaxai/minimax-m2.7
       api_key: os.environ/NVIDIA_API_KEY
 
   - model_name: mimo-v2.5
