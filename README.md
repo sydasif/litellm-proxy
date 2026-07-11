@@ -97,15 +97,15 @@ Config lives in `litellm/config.yaml`.
 
 ### LiteLLM Settings
 
-| Setting                                           | Value                         | Purpose                                                                                                                                                             |
-| :------------------------------------------------ | :---------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `drop_params`                                     | `true`                        | Drops unsupported params for cross-provider compatibility                                                                                                           |
-| `use_chat_completions_url_for_anthropic_messages` | `true`                        | Routes all providers via `/v1/chat/completions`                                                                                                                     |
-| `routing_strategy`                                | `simple-shuffle`              | Random distribution across the 2 NVIDIA key deployments                                                                                                             |
-| `num_retries`                                     | `1`                           | Retries failed calls on the other NVIDIA key                                                                                                                        |
-| `timeout`                                         | `120`                         | Caps each request at 120s                                                                                                                                           |
-| `fallbacks`                                       | `mimo-v2.5 → agnes-2.0-flash` | Sonnet falls back to Agnes after retries                                                                                                                            |
-| `extra_body.chat_template_kwargs.thinking`        | `false` (Opus only)           | Disables upstream reasoning on `nemotron-ultra-550b` so LiteLLM emits no Anthropic `thinking` block (avoids "Content block is not a thinking block" in Claude Code) |
+| Setting                                           | Value                         | Purpose                                                                                                                                                                                                                                                                                                                                                                             |
+| :------------------------------------------------ | :---------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `drop_params`                                     | `true`                        | Drops unsupported params for cross-provider compatibility                                                                                                                                                                                                                                                                                                                           |
+| `use_chat_completions_url_for_anthropic_messages` | `true`                        | Routes all providers via `/v1/chat/completions`                                                                                                                                                                                                                                                                                                                                     |
+| `routing_strategy`                                | `simple-shuffle`              | Random distribution across the 2 NVIDIA key deployments                                                                                                                                                                                                                                                                                                                             |
+| `num_retries`                                     | `1`                           | Retries failed calls on the other NVIDIA key                                                                                                                                                                                                                                                                                                                                        |
+| `timeout`                                         | `120`                         | Caps each request at 120s                                                                                                                                                                                                                                                                                                                                                           |
+| `fallbacks`                                       | `mimo-v2.5 → agnes-2.0-flash` | Sonnet falls back to Agnes after retries                                                                                                                                                                                                                                                                                                                                            |
+| `extra_body.chat_template_kwargs.enable_thinking` | `true` (nemotron)             | Keeps upstream reasoning ON for `nemotron-ultra-550b`. Claude Code must declare the model thinking-capable via `ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES='thinking,interleaved_thinking'` so it sends the `thinking` param and accepts the proxy's thinking blocks (avoids "Content block is not a thinking block"). NIM's param is `enable_thinking`, not `thinking`. |
 
 ---
 
@@ -115,9 +115,14 @@ Set these in `~/.profile` (or equivalent):
 
 ```bash
 export ANTHROPIC_BASE_URL=http://localhost:4000
-export ANTHROPIC_DEFAULT_OPUS_MODEL=nemotron-ultra-550b
-export ANTHROPIC_DEFAULT_SONNET_MODEL=mimo-v2.5
+export ANTHROPIC_DEFAULT_OPUS_MODEL=mimo-v2.5
+export ANTHROPIC_DEFAULT_SONNET_MODEL=nemotron-ultra-550b
 export ANTHROPIC_DEFAULT_HAIKU_MODEL=gpt-oss-120b
+
+# Tell Claude Code the third-party reasoning models support extended thinking,
+# so it sends the `thinking` param and accepts the proxy's thinking blocks.
+export ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES='thinking,interleaved_thinking'
+export ANTHROPIC_DEFAULT_HAIKU_MODEL_SUPPORTED_CAPABILITIES='thinking,interleaved_thinking'
 ```
 
 After editing, `source ~/.profile` or open a new shell before running `claude`.

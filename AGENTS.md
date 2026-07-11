@@ -39,7 +39,7 @@ docker compose pull && docker compose up -d  # Update image + restart
 - `router_settings.num_retries: 1` — retries failed calls (e.g. `429`) on the _other_ NVIDIA key.
 - `router_settings.timeout: 120` — caps each request at 120s.
 - `litellm_settings.fallbacks: [{"mimo-v2.5": ["agnes-2.0-flash"]}]` — Sonnet (`mimo-v2.5`) falls back to `agnes-2.0-flash` if it fails after retries.
-- Opus (`nemotron-ultra-550b`) sets `extra_body.chat_template_kwargs.thinking: false` — disables the model's upstream reasoning so LiteLLM emits no Anthropic `thinking` block, which otherwise breaks Claude Code multi-turn/tool flows with "Content block is not a thinking block".
+- `nemotron-ultra-550b` keeps upstream reasoning **enabled** (`extra_body.chat_template_kwargs.enable_thinking: true` + `force_nonempty_content: true` for tool use). Claude Code must be told the model supports thinking via `ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES='thinking,interleaved_thinking'` in `~/.profile` — without it, the proxy's thinking blocks are rejected with "Content block is not a thinking block". Note: NIM's param is `enable_thinking`, **not** `thinking`; the previously documented `thinking: false` was incorrect and also disabled reasoning.
 
 ---
 

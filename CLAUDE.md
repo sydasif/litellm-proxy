@@ -46,7 +46,7 @@ localhost:4000  ──►  LiteLLM container  ──►  NVIDIA NIM
 - `drop_params: true` — drops unsupported params for cross-provider compatibility.
 - `use_chat_completions_url_for_anthropic_messages: true` — routes Anthropic-style messages via `/v1/chat/completions` upstream.
 - `fallbacks: [{"mimo-v2.5": ["agnes-2.0-flash"]}]` — `mimo-v2.5` falls back to `agnes-2.0-flash` after retries.
-- Opus (`nemotron-ultra-550b`) sets `extra_body.chat_template_kwargs.thinking: false` — disables the model's upstream reasoning so LiteLLM emits no Anthropic `thinking` block (prevents "Content block is not a thinking block" in Claude Code multi-turn/tool flows). Tool calling is unaffected.
+- `nemotron-ultra-550b` keeps upstream reasoning **enabled** (`extra_body.chat_template_kwargs.enable_thinking: true` + `force_nonempty_content: true` for tool use). Claude Code must be told the model supports thinking via `ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES='thinking,interleaved_thinking'` in `~/.profile` — without it, the proxy's thinking blocks are rejected with "Content block is not a thinking block". Note: NIM's param is `enable_thinking`, **not** `thinking`; the previously documented `thinking: false` was incorrect and also disabled reasoning.
 
 **Router settings:**
 
