@@ -13,7 +13,8 @@ A proxy gateway that routes **Claude Code** through **LiteLLM** (Python) to mult
 
 - **Single proxy**: LiteLLM with official Docker image, load-balanced routing
 - **Multi-provider routing**: NVIDIA NIM, OpenCode Zen, and Agnes AI through a single `localhost:4000` endpoint
-- **Load balancing**: Multiple API keys per provider with `simple-shuffle` strategy
+- **Load balancing**: Two NVIDIA API keys with `simple-shuffle` strategy and cross-key retry
+- **Fallbacks**: `mimo-v2.5` falls back to `agnes-2.0-flash` if it fails after retries
 - **Parameter normalization**: `drop_params: true` drops unsupported params for cross-provider compatibility
 - **Anthropic message routing**: `use_chat_completions_url_for_anthropic_messages: true` routes all providers via `/v1/chat/completions`
 - **Docker Native**: Official LiteLLM image, compose file ready
@@ -56,11 +57,12 @@ cp .env.example .env
 
 Required keys:
 
-| Key                | Purpose                             |
-| ------------------ | ----------------------------------- |
-| `NVIDIA_API_KEY`   | NVIDIA NIM backend authentication   |
-| `AGNES_API_KEY`    | Agnes AI backend authentication     |
-| `OPENCODE_API_KEY` | OpenCode Zen backend authentication |
+| Key                | Purpose                                   |
+| ------------------ | ----------------------------------------- |
+| `NVIDIA_API_KEY_1` | NVIDIA NIM backend authentication (key 1) |
+| `NVIDIA_API_KEY_2` | NVIDIA NIM backend authentication (key 2) |
+| `OPENCODE_API_KEY` | OpenCode Zen backend authentication       |
+| `AGNES_API_KEY`    | Agnes AI backend (fallback for mimo-v2.5) |
 
 ### 2. Deploy
 
@@ -84,22 +86,25 @@ Config lives in `litellm/config.yaml`.
 
 ### Models
 
-| Model ID           | LiteLLM Model                                  | Base URL                              | RPM     | Keys               |
-| :----------------- | :--------------------------------------------- | :------------------------------------ | :------ | :----------------- |
-| `qwen3.5` | `nvidia_nim/qwen/qwen3.5-122b-a10b` | `https://integrate.api.nvidia.com/v1` | 300 rpm | `NVIDIA_API_KEY`   |
-| `agnes-2.0-flash`  | `openai/agnes-2.0-flash`                       | `https://apihub.agnes-ai.com/v1`      | 30 rpm  | `AGNES_API_KEY`    |
-| `mimo-v2.5`        | `openai/mimo-v2.5-free`                        | `https://opencode.ai/zen/v1`          | 30 rpm  | `OPENCODE_API_KEY` |
+| Model ID              | LiteLLM Model                                  | Base URL                              | RPM     | Keys                 |
+| :-------------------- | :--------------------------------------------- | :------------------------------------ | :------ | :------------------- |
+| `gpt-oss-120b`        | `nvidia_nim/openai/gpt-oss-120b`               | `https://integrate.api.nvidia.com/v1` | ~80 rpm | `NVIDIA_API_KEY_1/2` |
+| `mimo-v2.5`           | `openai/mimo-v2.5-free`                        | `https://opencode.ai/zen/v1`          | 30 rpm  | `OPENCODE_API_KEY`   |
+| `nemotron-ultra-550b` | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` | `https://integrate.api.nvidia.com/v1` | ~80 rpm | `NVIDIA_API_KEY_1/2` |
+| `agnes-2.0-flash`     | `openai/agnes-2.0-flash`                       | `https://apihub.agnes-ai.com/v1`      | —       | `AGNES_API_KEY`      |
 
-**Request format:** Use the Model ID directly (e.g. `mimo-v2.5`, `agnes-2.0-flash`).
+**Request format:** Use the Model ID directly (e.g. `gpt-oss-120b`, `mimo-v2.5`, `nemotron-ultra-550b`).
 
 ### LiteLLM Settings
 
-| Setting                                           | Value            | Purpose                                                   |
-| :------------------------------------------------ | :--------------- | :-------------------------------------------------------- |
-| `drop_params`                                     | `true`           | Drops unsupported params for cross-provider compatibility |
-| `use_chat_completions_url_for_anthropic_messages` | `true`           | Routes all providers via `/v1/chat/completions`           |
-| `num_retries`                                     | `0`              | No automatic retry                                        |
-| `routing_strategy`                                | `simple-shuffle` | Random distribution across duplicate keys                 |
+| Setting                                           | Value                         | Purpose                                                   |
+| :------------------------------------------------ | :---------------------------- | :-------------------------------------------------------- |
+| `drop_params`                                     | `true`                        | Drops unsupported params for cross-provider compatibility |
+| `use_chat_completions_url_for_anthropic_messages` | `true`                        | Routes all providers via `/v1/chat/completions`           |
+| `routing_strategy`                                | `simple-shuffle`              | Random distribution across the 2 NVIDIA key deployments   |
+| `num_retries`                                     | `1`                           | Retries failed calls on the other NVIDIA key              |
+| `timeout`                                         | `120`                         | Caps each request at 120s                                 |
+| `fallbacks`                                       | `mimo-v2.5 → agnes-2.0-flash` | Sonnet falls back to Agnes after retries                  |
 
 ---
 
@@ -109,9 +114,9 @@ Set these in `~/.profile` (or equivalent):
 
 ```bash
 export ANTHROPIC_BASE_URL=http://localhost:4000
-export ANTHROPIC_DEFAULT_OPUS_MODEL=qwen3.5
-export ANTHROPIC_DEFAULT_SONNET_MODEL=agnes-2.0-flash
-export ANTHROPIC_DEFAULT_HAIKU_MODEL=mimo-v2.5
+export ANTHROPIC_DEFAULT_OPUS_MODEL=nemotron-ultra-550b
+export ANTHROPIC_DEFAULT_SONNET_MODEL=mimo-v2.5
+export ANTHROPIC_DEFAULT_HAIKU_MODEL=gpt-oss-120b
 ```
 
 After editing, `source ~/.profile` or open a new shell before running `claude`.

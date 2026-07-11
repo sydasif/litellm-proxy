@@ -1,14 +1,29 @@
 model_list:
-  - model_name: minimax-m2.7
+  - model_name: gpt-oss-120b
     litellm_params:
-      model: nvidia_nim/minimaxai/minimax-m2.7
-      api_key: os.environ/NVIDIA_API_KEY
+      model: nvidia_nim/openai/gpt-oss-120b
+      api_key: os.environ/NVIDIA_API_KEY_1
+
+  - model_name: gpt-oss-120b
+    litellm_params:
+      model: nvidia_nim/openai/gpt-oss-120b
+      api_key: os.environ/NVIDIA_API_KEY_2
 
   - model_name: mimo-v2.5
     litellm_params:
       model: openai/mimo-v2.5-free
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
+
+  - model_name: nemotron-ultra-550b
+    litellm_params:
+      model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
+      api_key: os.environ/NVIDIA_API_KEY_1
+
+  - model_name: nemotron-ultra-550b
+    litellm_params:
+      model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
+      api_key: os.environ/NVIDIA_API_KEY_2
 
   - model_name: agnes-2.0-flash
     litellm_params:
@@ -19,3 +34,9 @@ model_list:
 litellm_settings:
   drop_params: true
   use_chat_completions_url_for_anthropic_messages: true
+  fallbacks: [{ "mimo-v2.5": ["agnes-2.0-flash"] }]
+
+router_settings:
+  routing_strategy: simple-shuffle
+  num_retries: 1
+  timeout: 120

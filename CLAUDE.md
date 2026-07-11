@@ -20,30 +20,38 @@ This is an **AI proxy gateway** that routes **Claude Code** through **LiteLLM** 
         ▼
 localhost:4000  ──►  LiteLLM container  ──►  NVIDIA NIM
                                           ──►  OpenCode Zen
-                                          ──►  Agnes AI
+                                          ──►  Agnes AI (fallback)
 ```
 
 **Key files:**
 
-| Path                  | Role                                                                          |
-| --------------------- | ----------------------------------------------------------------------------- |
-| `docker-compose.yml`  | Defines the single `litellm` service, mounts, port, env_file                  |
-| `litellm/config.yaml` | Model list (3 providers) + LiteLLM routing/normalization settings             |
-| `.env`                | API keys (gitignored) — `NVIDIA_API_KEY`, `AGNES_API_KEY`, `OPENCODE_API_KEY` |
-| `.env.example`        | Template for `.env`                                                           |
-| `AGENTS.md`           | Operator runbook — quick reference, failure handling                          |
-| `README.md`           | Setup, provider table, .profile values, stack management                      |
+| Path                  | Role                                                                                                |
+| --------------------- | --------------------------------------------------------------------------------------------------- |
+| `docker-compose.yml`  | Defines the single `litellm` service, mounts, port, env_file                                        |
+| `litellm/config.yaml` | Model list (3 models) + LiteLLM routing/normalization settings                                      |
+| `.env`                | API keys (gitignored) — `NVIDIA_API_KEY_1`, `NVIDIA_API_KEY_2`, `OPENCODE_API_KEY`, `AGNES_API_KEY` |
+| `.env.example`        | Template for `.env`                                                                                 |
+| `AGENTS.md`           | Operator runbook — quick reference, failure handling                                                |
+| `README.md`           | Setup, provider table, .profile values, stack management                                            |
 
 **Provider model map** (`litellm/config.yaml`):
 
-- `minimax-m2.7` → `nvidia_nim/minimaxai/minimax-m2.7` via `https://integrate.api.nvidia.com/v1`
+- `gpt-oss-120b` → `nvidia_nim/openai/gpt-oss-120b` via `https://integrate.api.nvidia.com/v1` (2-key deployment)
 - `mimo-v2.5` → `openai/mimo-v2.5-free` via `https://opencode.ai/zen/v1`
-- `agnes-2.0-flash` → `openai/agnes-2.0-flash` via `https://apihub.agnes-ai.com/v1`
+- `nemotron-ultra-550b` → `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` via `https://integrate.api.nvidia.com/v1` (2-key deployment)
+- `agnes-2.0-flash` → `openai/agnes-2.0-flash` via `https://apihub.agnes-ai.com/v1` (fallback for `mimo-v2.5`)
 
 **LiteLLM settings:**
 
 - `drop_params: true` — drops unsupported params for cross-provider compatibility.
 - `use_chat_completions_url_for_anthropic_messages: true` — routes Anthropic-style messages via `/v1/chat/completions` upstream.
+- `fallbacks: [{"mimo-v2.5": ["agnes-2.0-flash"]}]` — `mimo-v2.5` falls back to `agnes-2.0-flash` after retries.
+
+**Router settings:**
+
+- `routing_strategy: simple-shuffle` — random distribution across the 2 NVIDIA key deployments (~80 rpm combined).
+- `num_retries: 1` — retries failed calls (e.g. `429`) on the other NVIDIA key.
+- `timeout: 120` — caps each request at 120s.
 
 ---
 
@@ -85,9 +93,9 @@ Claude Code is configured to hit the proxy via environment variables (typically 
 
 ```bash
 export ANTHROPIC_BASE_URL=http://localhost:4000
-export ANTHROPIC_DEFAULT_OPUS_MODEL=minimax-m2.7
-export ANTHROPIC_DEFAULT_SONNET_MODEL=agnes-2.0-flash
-export ANTHROPIC_DEFAULT_HAIKU_MODEL=mimo-v2.5
+export ANTHROPIC_DEFAULT_OPUS_MODEL=nemotron-ultra-550b
+export ANTHROPIC_DEFAULT_SONNET_MODEL=mimo-v2.5
+export ANTHROPIC_DEFAULT_HAIKU_MODEL=gpt-oss-120b
 ```
 
 After editing, `source ~/.profile` or open a new shell before running `claude`.

@@ -22,20 +22,23 @@ docker compose pull && docker compose up -d  # Update image + restart
 
 ### LiteLLM — `litellm/config.yaml`
 
-| Model ID           | Backend                                      | Timeout | Keys             |
-| :----------------- | :------------------------------------------- | :------ | :--------------- |
-| `qwen3.5` | nvidia_nim/qwen/qwen3.5-122b-a10b | 300s    | NVIDIA_API_KEY   |
-| `agnes-2.0-flash`  | openai/agnes-2.0-flash                       | 120s    | AGNES_API_KEY    |
-| `mimo-v2.5`        | openai/mimo-v2.5-free                        | 120s    | OPENCODE_API_KEY |
+| Model ID              | Backend                                         | Timeout | Keys               |
+| :-------------------- | :---------------------------------------------- | :------ | :----------------- |
+| `gpt-oss-120b`        | nvidia_nim/openai/gpt-oss-120b                  | 120s    | NVIDIA_API_KEY_1/2 |
+| `mimo-v2.5`           | openai/mimo-v2.5-free                           | 120s    | OPENCODE_API_KEY   |
+| `nemotron-ultra-550b` | nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b    | 120s    | NVIDIA_API_KEY_1/2 |
+| `agnes-2.0-flash`     | openai/agnes-2.0-flash (fallback for mimo-v2.5) | 120s    | AGNES_API_KEY      |
 
-**Request format:** Use the Model ID directly (e.g. `qwen3.5`, `agnes-2.0-flash`).
+**Request format:** Use the Model ID directly (e.g. `gpt-oss-120b`, `mimo-v2.5`, `nemotron-ultra-550b`).
 
 **Features:**
 
 - `drop_params: true` — drops unsupported params for compatibility.
 - `use_chat_completions_url_for_anthropic_messages: true` — routes upstream via `/v1/chat/completions` for all providers.
-- `num_retries: 0` — no auto-retry.
-- `routing_strategy: simple-shuffle` — random distribution across duplicate keys.
+- `router_settings.routing_strategy: simple-shuffle` — random distribution across the 2 NVIDIA key deployments (combined ~80 rpm).
+- `router_settings.num_retries: 1` — retries failed calls (e.g. `429`) on the _other_ NVIDIA key.
+- `router_settings.timeout: 120` — caps each request at 120s.
+- `litellm_settings.fallbacks: [{"mimo-v2.5": ["agnes-2.0-flash"]}]` — Sonnet (`mimo-v2.5`) falls back to `agnes-2.0-flash` if it fails after retries.
 
 ---
 
@@ -44,9 +47,9 @@ docker compose pull && docker compose up -d  # Update image + restart
 | Variable                         | Value                   |
 | -------------------------------- | ----------------------- |
 | `ANTHROPIC_BASE_URL`             | `http://localhost:4000` |
-| `ANTHROPIC_DEFAULT_OPUS_MODEL`   | `qwen3.5`         |
-| `ANTHROPIC_DEFAULT_SONNET_MODEL` | `agnes-2.0-flash`       |
-| `ANTHROPIC_DEFAULT_HAIKU_MODEL`  | `mimo-v2.5`             |
+| `ANTHROPIC_DEFAULT_OPUS_MODEL`   | `nemotron-ultra-550b`   |
+| `ANTHROPIC_DEFAULT_SONNET_MODEL` | `mimo-v2.5`             |
+| `ANTHROPIC_DEFAULT_HAIKU_MODEL`  | `gpt-oss-120b`          |
 
 ---
 
