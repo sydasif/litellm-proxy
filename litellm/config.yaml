@@ -35,7 +35,12 @@ litellm_settings:
   drop_params: true
   modify_params: true
   use_chat_completions_url_for_anthropic_messages: true
-  fallbacks: [{ "mimo-v2.5": ["agnes-2.0-flash"] }]
+  fallbacks:
+    [
+      { "mimo-v2.5": ["agnes-2.0-flash"] },
+      { "nemotron-ultra-550b": ["agnes-2.0-flash"] },
+      { "gpt-oss-120b": ["agnes-2.0-flash"] },
+    ]
 
 router_settings:
   routing_strategy: simple-shuffle
