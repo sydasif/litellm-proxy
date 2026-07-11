@@ -46,6 +46,7 @@ localhost:4000  ──►  LiteLLM container  ──►  NVIDIA NIM
 - `drop_params: true` — drops unsupported params for cross-provider compatibility.
 - `use_chat_completions_url_for_anthropic_messages: true` — routes Anthropic-style messages via `/v1/chat/completions` upstream.
 - `fallbacks: [{"mimo-v2.5": ["agnes-2.0-flash"]}]` — `mimo-v2.5` falls back to `agnes-2.0-flash` after retries.
+- Opus (`nemotron-ultra-550b`) sets `extra_body.chat_template_kwargs.thinking: false` — disables the model's upstream reasoning so LiteLLM emits no Anthropic `thinking` block (prevents "Content block is not a thinking block" in Claude Code multi-turn/tool flows). Tool calling is unaffected.
 
 **Router settings:**
 

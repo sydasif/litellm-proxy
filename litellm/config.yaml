@@ -19,11 +19,17 @@ model_list:
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
       api_key: os.environ/NVIDIA_API_KEY_1
+      extra_body:
+        chat_template_kwargs:
+          thinking: false
 
   - model_name: nemotron-ultra-550b
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
       api_key: os.environ/NVIDIA_API_KEY_2
+      extra_body:
+        chat_template_kwargs:
+          thinking: false
 
   - model_name: agnes-2.0-flash
     litellm_params:

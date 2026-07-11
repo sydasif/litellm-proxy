@@ -39,6 +39,7 @@ docker compose pull && docker compose up -d  # Update image + restart
 - `router_settings.num_retries: 1` — retries failed calls (e.g. `429`) on the _other_ NVIDIA key.
 - `router_settings.timeout: 120` — caps each request at 120s.
 - `litellm_settings.fallbacks: [{"mimo-v2.5": ["agnes-2.0-flash"]}]` — Sonnet (`mimo-v2.5`) falls back to `agnes-2.0-flash` if it fails after retries.
+- Opus (`nemotron-ultra-550b`) sets `extra_body.chat_template_kwargs.thinking: false` — disables the model's upstream reasoning so LiteLLM emits no Anthropic `thinking` block, which otherwise breaks Claude Code multi-turn/tool flows with "Content block is not a thinking block".
 
 ---
 
