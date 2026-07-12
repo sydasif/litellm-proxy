@@ -33,7 +33,7 @@ model_list:
 
 litellm_settings:
   drop_params: true
-  use_chat_completions_url_for_anthropic_messages: true
+  modify_params: true
   fallbacks:
     [
       { "mimo-v2.5": ["agnes-2.0-flash"] },
