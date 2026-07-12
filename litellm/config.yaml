@@ -3,51 +3,33 @@ model_list:
     litellm_params:
       model: nvidia_nim/openai/gpt-oss-120b
       api_key: os.environ/NVIDIA_API_KEY_1
-      extra_body:
-        chat_template_kwargs:
-          enable_thinking: true
 
   - model_name: gpt-oss-120b
     litellm_params:
       model: nvidia_nim/openai/gpt-oss-120b
       api_key: os.environ/NVIDIA_API_KEY_2
-      extra_body:
-        chat_template_kwargs:
-          enable_thinking: true
 
-  - model_name: nemotron-3-ultra
+  - model_name: nemotron-3-super
     litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
+      model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b
       api_key: os.environ/NVIDIA_API_KEY_1
-      extra_body:
-        chat_template_kwargs:
-          enable_thinking: false
 
-  - model_name: nemotron-3-ultra
+  - model_name: nemotron-3-super
     litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
+      model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b
       api_key: os.environ/NVIDIA_API_KEY_2
-      extra_body:
-        chat_template_kwargs:
-          enable_thinking: false
 
   - model_name: mimo-v2.5
     litellm_params:
       model: openai/mimo-v2.5-free
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
-      extra_body:
-        chat_template_kwargs:
-          enable_thinking: true
 
   - model_name: agnes-2.0-flash
     litellm_params:
       model: openai/agnes-2.0-flash
       api_base: https://apihub.agnes-ai.com/v1
       api_key: os.environ/AGNES_API_KEY
-      extra_body:
-        chat_template_kwargs:
-          enable_thinking: true
 
 litellm_settings:
   drop_params: true

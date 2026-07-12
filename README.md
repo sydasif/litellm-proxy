@@ -7,36 +7,15 @@
 
 A proxy gateway that routes **Claude Code** through **LiteLLM** (Python) to multiple AI backend providers with load balancing and parameter normalization.
 
----
-
 ## Features
 
-- **Single proxy**: LiteLLM with official Docker image, load-balanced routing
-- **Multi-provider routing**: NVIDIA NIM, OpenCode Zen, and Agnes AI through a single `localhost:4000` endpoint
-- **Load balancing**: Two NVIDIA API keys with `simple-shuffle` strategy and cross-key retry
-- **Fallbacks**: `mimo-v2.5` falls back to `agnes-2.0-flash` if it fails after retries
-- **Parameter normalization**: `drop_params: true` drops unsupported params for cross-provider compatibility
-- **Anthropic message routing**: `use_chat_completions_url_for_anthropic_messages: true` routes all providers via `/v1/chat/completions`
-- **Docker Native**: Official LiteLLM image, compose file ready
-- **Secure**: Environment-based API key management
-
----
-
-## Project Structure
-
-```
-litellm-proxy/
-├── docker-compose.yml          # Active compose (LiteLLM)
-├── .env                        # API keys (gitignored)
-├── .env.example                # Template
-├── .gitignore
-├── AGENTS.md                   # Operator runbook
-├── README.md
-└── litellm/
-    └── config.yaml             # LiteLLM provider config
-```
-
----
+- **Multi-provider routing**: Access NVIDIA NIM, OpenCode Zen, and Agnes AI through a single endpoint
+- **Load balancing**: Distributes requests across multiple NVIDIA API keys using `simple-shuffle` strategy
+- **Automatic fallbacks**: Models like `mimo-v2.5` automatically fallback to `agnes-2.0-flash` on failure
+- **Parameter normalization**: Drops unsupported parameters (`drop_params: true`) for cross-provider compatibility
+- **Anthropic compatibility**: Routes all providers via `/v1/chat/completions` endpoint for seamless Claude Code integration
+- **Dockerized**: Uses official LiteLLM image for consistent deployment
+- **Secure**: API keys managed exclusively via environment variables
 
 ## Prerequisites
 
@@ -44,111 +23,125 @@ litellm-proxy/
 - [Docker Compose](https://docs.docker.com/compose/install/)
 - API keys for the backends you plan to use (see `.env.example`)
 
----
+## Setup
 
-## Quick Start
+1. **Clone the repository**
 
-### 1. Configure Environment
+   ```bash
+   git clone <repository-url>
+   cd litellm-proxy
+   ```
 
-```bash
-cp .env.example .env
-# Edit .env with your real API keys
-```
+2. **Configure environment variables**
 
-Required keys:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your API keys:
+   #   NVIDIA_API_KEY_1, NVIDIA_API_KEY_2, OPENCODE_API_KEY, AGNES_API_KEY
+   ```
 
-| Key                | Purpose                                   |
-| ------------------ | ----------------------------------------- |
-| `NVIDIA_API_KEY_1` | NVIDIA NIM backend authentication (key 1) |
-| `NVIDIA_API_KEY_2` | NVIDIA NIM backend authentication (key 2) |
-| `OPENCODE_API_KEY` | OpenCode Zen backend authentication       |
-| `AGNES_API_KEY`    | Agnes AI backend (fallback for mimo-v2.5) |
+3. **Start the proxy**
 
-### 2. Deploy
+   ```bash
+   docker compose up -d
+   ```
 
-```bash
-docker compose up -d
-```
+4. **Verify the service is running**
 
-The LiteLLM proxy starts on port **4000**.
+   ```bash
+   curl http://localhost:4000/v1/models
+   ```
 
-### 3. Verify
+## Usage
 
-```bash
-curl http://localhost:4000/v1/models
-```
-
----
-
-## Provider Configuration
-
-Config lives in `litellm/config.yaml`.
-
-### Models
-
-| Model ID              | LiteLLM Model                                  | Base URL                              | RPM     | Keys                 |
-| :-------------------- | :--------------------------------------------- | :------------------------------------ | :------ | :------------------- |
-| `gpt-oss-120b`        | `nvidia_nim/openai/gpt-oss-120b`               | `https://integrate.api.nvidia.com/v1` | ~80 rpm | `NVIDIA_API_KEY_1/2` |
-| `mimo-v2.5`           | `openai/mimo-v2.5-free`                        | `https://opencode.ai/zen/v1`          | 30 rpm  | `OPENCODE_API_KEY`   |
-| `nemotron-ultra-550b` | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` | `https://integrate.api.nvidia.com/v1` | ~80 rpm | `NVIDIA_API_KEY_1/2` |
-| `agnes-2.0-flash`     | `openai/agnes-2.0-flash`                       | `https://apihub.agnes-ai.com/v1`      | —       | `AGNES_API_KEY`      |
-
-**Request format:** Use the Model ID directly (e.g. `gpt-oss-120b`, `mimo-v2.5`, `nemotron-ultra-550b`).
-
-### LiteLLM Settings
-
-| Setting                                           | Value                         | Purpose                                                                                                                                                                                                                                                                                                                                                                             |
-| :------------------------------------------------ | :---------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `drop_params`                                     | `true`                        | Drops unsupported params for cross-provider compatibility                                                                                                                                                                                                                                                                                                                           |
-| `use_chat_completions_url_for_anthropic_messages` | `true`                        | Routes all providers via `/v1/chat/completions`                                                                                                                                                                                                                                                                                                                                     |
-| `routing_strategy`                                | `simple-shuffle`              | Random distribution across the 2 NVIDIA key deployments                                                                                                                                                                                                                                                                                                                             |
-| `num_retries`                                     | `1`                           | Retries failed calls on the other NVIDIA key                                                                                                                                                                                                                                                                                                                                        |
-| `timeout`                                         | `120`                         | Caps each request at 120s                                                                                                                                                                                                                                                                                                                                                           |
-| `fallbacks`                                       | `mimo-v2.5 → agnes-2.0-flash` | Sonnet falls back to Agnes after retries                                                                                                                                                                                                                                                                                                                                            |
-| `extra_body.chat_template_kwargs.enable_thinking` | `false` (nemotron-3-ultra) / `true` (others) | Upstream reasoning OFF for `nemotron-3-ultra`, ON for `gpt-oss-120b`, `mimo-v2.5`, `agnes-2.0-flash`. NIM's param is `enable_thinking`, not `thinking`. |
-
----
-
-## Using with Claude Code
-
-Set these in `~/.profile` (or equivalent):
+Once the proxy is running on `localhost:4000`, configure Claude Code to use it by setting these environment variables:
 
 ```bash
 export ANTHROPIC_BASE_URL=http://localhost:4000
 export ANTHROPIC_DEFAULT_OPUS_MODEL=mimo-v2.5
-export ANTHROPIC_DEFAULT_SONNET_MODEL=nemotron-ultra-550b
+export ANTHROPIC_DEFAULT_SONNET_MODEL=nemotron-3-super
 export ANTHROPIC_DEFAULT_HAIKU_MODEL=gpt-oss-120b
-
-# Tell Claude Code the reasoning-capable models support extended thinking,
-# so it sends the `thinking` param and accepts the proxy's thinking blocks.
-# (nemotron-3-ultra / Sonnet has upstream thinking disabled and is excluded.)
-export ANTHROPIC_DEFAULT_HAIKU_MODEL_SUPPORTED_CAPABILITIES='thinking,interleaved_thinking'
 ```
 
-After editing, `source ~/.profile` or open a new shell before running `claude`.
+Add these to your `~/.profile` or equivalent and restart your terminal.
 
----
+### Testing the Proxy
 
-## Managing the Stack
-
-| Action           | Command                                       |
-| :--------------- | :-------------------------------------------- |
-| **Start**        | `docker compose up -d`                        |
-| **Stop**         | `docker compose down`                         |
-| **View Logs**    | `docker compose logs -f`                      |
-| **Restart**      | `docker compose restart`                      |
-| **Update**       | `docker compose pull && docker compose up -d` |
-| **Models Check** | `curl http://localhost:4000/v1/models`        |
-
-### Config Changes
-
-The config file is mounted **read-only** (`:ro`). Changes require a full container restart — `docker compose restart` alone will **not** pick up new config:
+You can test the proxy directly with curl:
 
 ```bash
-docker compose down && docker compose up -d
+curl -X POST http://localhost:4000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "nemotron-3-super",
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "max_tokens": 100
+  }'
 ```
 
----
+## Project Structure
+
+```bash
+litellm-proxy/
+├── docker-compose.yml          # Docker Compose configuration for LiteLLM
+├── .env                        # API keys (gitignored)
+├── .env.example                # Template for environment variables
+├── .gitignore
+├── README.md                   # Project overview and setup instructions
+└── litellm/
+    └── config.yaml             # LiteLLM provider configuration
+```
+
+### Configuration Details (`litellm/config.yaml`)
+
+- **Providers**: Configured models include:
+  - `gpt-oss-120b` (NVIDIA NIM)
+  - `nemotron-3-super` (NVIDIA NIM)
+  - `mimo-v2.5` (OpenCode Zen)
+  - `agnes-2.0-flash` (Agnes AI)
+- **Load Balancing**: `simple-shuffle` strategy distributes requests across NVIDIA API keys
+- **Fallbacks**: Automatic fallback chains (e.g., `mimo-v2.5 → agnes-2.0-flash`)
+- **Parameter Handling**: `drop_params: true` ensures cross-provider compatibility
+- **Anthropic Routing**: `use_chat_completions_url_for_anthropic_messages: true` routes all providers via `/v1/chat/completions`
+
+## Maintenance
+
+- **Update API keys**: Edit `.env` file as needed
+- **Modify configuration**: Update `litellm/config.yaml` to add/remove providers or adjust routing
+- **Apply config changes**: Requires full container restart:
+
+  ```bash
+  docker compose down && docker compose up -d
+  ```
+
+- **Update LiteLLM**: Pull latest image and recreate containers:
+
+  ```bash
+  docker compose pull && docker compose up -d
+  ```
+
+- **Monitor logs**:
+
+  ```bash
+  docker compose logs -f
+  ```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+Please ensure any changes maintain the security principle of keeping API keys in environment variables only.
+
+## Security Notes
+
+- API keys are stored exclusively in environment variables (`.env` file)
+- The `.env` file is gitignored to prevent accidental commitment of secrets
+- No secrets should ever be added to the codebase or configuration files
+- Regularly rotate your API keys following provider best practices
 
 ## License
 

@@ -2,123 +2,76 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
----
+## Project Overview
 
-## Repository Overview
+AI Proxy Gateway that routes Claude Code through LiteLLM to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, Agnes AI) with load balancing and parameter normalization. Uses Docker Compose to deploy the official LiteLLM image.
 
-This is an **AI proxy gateway** that routes **Claude Code** through **LiteLLM** (Python) to multiple AI backend providers with load balancing and parameter normalization. The repo is intentionally minimal — there is no application source code to build or test. It exists to deploy and operate a single Docker service.
-
----
-
-## Architecture
-
-**Single-service deployment:** One container running the official LiteLLM Docker image, mounted with a read-only config file and an `.env` of API keys. The container exposes port **4000** on the host.
+## Project Structure
 
 ```
-~/.profile env vars         Claude Code CLI
-        │
-        ▼
-localhost:4000  ──►  LiteLLM container  ──►  NVIDIA NIM
-                                          ──►  OpenCode Zen
-                                          ──►  Agnes AI (fallback)
+litellm-proxy/
+├── docker-compose.yml          # Docker Compose configuration
+├── .env                        # API keys (gitignored)
+├── .env.example                # Template for environment variables
+├── .gitignore
+├── README.md                   # Project overview and setup
+└── litellm/
+    └── config.yaml             # LiteLLM provider configuration
 ```
 
-**Key files:**
+## Development Commands
 
-| Path                  | Role                                                                                                |
-| --------------------- | --------------------------------------------------------------------------------------------------- |
-| `docker-compose.yml`  | Defines the single `litellm` service, mounts, port, env_file                                        |
-| `litellm/config.yaml` | Model list (3 models) + LiteLLM routing/normalization settings                                      |
-| `.env`                | API keys (gitignored) — `NVIDIA_API_KEY_1`, `NVIDIA_API_KEY_2`, `OPENCODE_API_KEY`, `AGNES_API_KEY` |
-| `.env.example`        | Template for `.env`                                                                                 |
-| `AGENTS.md`           | Operator runbook — quick reference, failure handling                                                |
-| `README.md`           | Setup, provider table, .profile values, stack management                                            |
-
-**Provider model map** (`litellm/config.yaml`):
-
-- `gpt-oss-120b` → `nvidia_nim/openai/gpt-oss-120b` via `https://integrate.api.nvidia.com/v1` (2-key deployment)
-- `mimo-v2.5` → `openai/mimo-v2.5-free` via `https://opencode.ai/zen/v1`
-- `nemotron-ultra-550b` → `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` via `https://integrate.api.nvidia.com/v1` (2-key deployment)
-- `agnes-2.0-flash` → `openai/agnes-2.0-flash` via `https://apihub.agnes-ai.com/v1` (fallback for `mimo-v2.5`)
-
-**LiteLLM settings:**
-
-- `drop_params: true` — drops unsupported params for cross-provider compatibility.
-- `use_chat_completions_url_for_anthropic_messages: true` — routes Anthropic-style messages via `/v1/chat/completions` upstream.
-- `fallbacks: [{"mimo-v2.5": ["agnes-2.0-flash"]}]` — `mimo-v2.5` falls back to `agnes-2.0-flash` after retries.
-- `nemotron-ultra-550b` has upstream reasoning **disabled** (`extra_body.chat_template_kwargs.enable_thinking: false`). Claude Code must NOT declare it thinking-capable (`ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES` is left unset). `gpt-oss-120b`, `mimo-v2.5`, and `agnes-2.0-flash` keep reasoning enabled (`enable_thinking: true`). NIM's param is `enable_thinking`, **not** `thinking`.
-
-**Router settings:**
-
-- `routing_strategy: simple-shuffle` — random distribution across the 2 NVIDIA key deployments (~80 rpm combined).
-- `num_retries: 1` — retries failed calls (e.g. `429`) on the other NVIDIA key.
-- `timeout: 120` — caps each request at 120s.
-
----
-
-## Common Commands
-
-The codebase is configuration-only — there is no build, lint, or test step. All workflows are Docker Compose operations on a single container.
+### Environment Setup
 
 ```bash
-# Deploy / start
+# Copy environment template and configure API keys
+cp .env.example .env
+# Edit .env with your API keys:
+#   NVIDIA_API_KEY_1, NVIDIA_API_KEY_2, OPENCODE_API_KEY, AGNES_API_KEY
+
+# Start the proxy service
 docker compose up -d
 
-# Stop
+# Stop the service
 docker compose down
 
-# Tail logs
+# View logs
 docker compose logs -f
-
-# Restart (does NOT reload config — see below)
-docker compose restart
-
-# Update image + restart
-docker compose pull && docker compose up -d
-
-# Health check / list models
-curl http://localhost:4000/v1/models
 ```
 
-**Config changes require a full container restart** — the config file is mounted `:ro`, so `docker compose restart` alone will **not** pick up changes to `litellm/config.yaml`:
+### Configuration
+
+Modify `litellm/config.yaml` to adjust providers, load balancing, fallbacks, or parameter normalization. Key settings:
+
+- Load balancing: `simple-shuffle` across NVIDIA API keys
+- Fallbacks: `mimo-v2.5` → `agnes-2.0-flash`
+- Parameter normalization: `drop_params: true`
+- Anthropic routing: `use_chat_completions_url_for_anthropic_messages: true`
+
+After config changes: `docker compose restart`
+
+### Testing
+
+Test the running proxy (localhost:4000):
 
 ```bash
-docker compose down && docker compose up -d
+curl -X POST http://localhost:4000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "nemotron-3-super",
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "max_tokens": 100
+  }'
 ```
 
----
+## Maintenance
 
-## Client Configuration
+- Update API keys in `.env` as needed
+- Modify `litellm/config.yaml` for provider/routing changes
+- Update LiteLLM image: `docker compose pull && docker compose up -d`
+- Monitor logs: `docker compose logs -f`
 
-Claude Code is configured to hit the proxy via environment variables (typically set in `~/.profile`):
+## Security
 
-```bash
-export ANTHROPIC_BASE_URL=http://localhost:4000
-export ANTHROPIC_DEFAULT_OPUS_MODEL=nemotron-ultra-550b
-export ANTHROPIC_DEFAULT_SONNET_MODEL=mimo-v2.5
-export ANTHROPIC_DEFAULT_HAIKU_MODEL=gpt-oss-120b
-```
-
-After editing, `source ~/.profile` or open a new shell before running `claude`.
-
----
-
-## Failure Handling (from AGENTS.md)
-
-| Symptom                   | Fix                                                                   |
-| ------------------------- | --------------------------------------------------------------------- |
-| `address already in use`  | `docker ps` — leftover containers on port 4000                        |
-| `401` / `Invalid API key` | Verify the required keys are set in `.env`                            |
-| Service won't start       | `docker compose logs -f` — check startup logs                         |
-| `model not found`         | Update model names in `litellm/config.yaml`                           |
-| Config not applied        | `docker compose down && up -d` (not `restart`) — config loads at boot |
-
-**Escalate if:** (1) backend API quota exceeded (`429`), (2) Docker daemon unavailable, (3) Claude Code still can't see the model after a config change.
-
----
-
-## Project Conventions
-
-- **Config file:** `litellm/config.yaml` is the source of truth for routing and normalization. Every model entry needs an `api_key: os.environ/<NAME>` reference and the matching var in `.env`.
-- **API keys:** Environment variables only. `.env` is gitignored; never commit secrets.
-- **No app code:** Resist the urge to add scripts, tests, or framing that this repo doesn't already own. Changes here should be limited to `litellm/config.yaml`, `docker-compose.yml`, `README.md`, and `AGENTS.md`.
+- API keys stored exclusively in `.env` (gitignored)
+- No secrets in codebase or configuration files
