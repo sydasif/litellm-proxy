@@ -58,7 +58,7 @@ Test the running proxy (localhost:4000):
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "nemotron-3-super",
+    "model": "claude-opus-4-8",
     "messages": [{"role": "user", "content": "Hello!"}],
     "max_tokens": 100
   }'

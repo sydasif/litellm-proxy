@@ -68,9 +68,9 @@ Once the proxy is running on `localhost:4000`, configure Claude Code to use it b
 
 ```bash
 export ANTHROPIC_BASE_URL=http://localhost:4000
-export ANTHROPIC_DEFAULT_OPUS_MODEL=mimo-v2.5
-export ANTHROPIC_DEFAULT_SONNET_MODEL=nemotron-3-super
-export ANTHROPIC_DEFAULT_HAIKU_MODEL=gpt-oss-120b
+export ANTHROPIC_DEFAULT_OPUS_MODEL=claude-opus-4-8
+export ANTHROPIC_DEFAULT_SONNET_MODEL=claude-sonnet-5
+export ANTHROPIC_DEFAULT_HAIKU_MODEL=claude-haiku-4-5-20251001
 ```
 
 Add these to your `~/.profile` or equivalent and restart your terminal.
@@ -83,7 +83,7 @@ You can test the proxy directly with curl:
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "nemotron-3-super",
+    "model": "claude-opus-4-8",
     "messages": [{"role": "user", "content": "Hello!"}],
     "max_tokens": 100
   }'
@@ -104,13 +104,13 @@ litellm-proxy/
 
 ### Configuration Details (`litellm/config.yaml`)
 
-- **Providers**: Configured models include:
-  - `gpt-oss-120b` (NVIDIA NIM)
-  - `nemotron-3-super` (NVIDIA NIM)
-  - `mimo-v2.5` (OpenCode Zen)
-  - `agnes-2.0-flash` (Agnes AI)
-- **Load Balancing**: `simple-shuffle` strategy distributes requests across NVIDIA API keys
-- **Fallbacks**: Automatic fallback chains (e.g., `mimo-v2.5 → agnes-2.0-flash`)
+- **Model Aliases**: Configured aliases map to backend providers:
+  - `claude-opus-4-8` → `nvidia/nemotron-3-ultra-550b-a55b` (NVIDIA NIM, 2 API keys, load balanced)
+  - `claude-sonnet-5` → `mimo-v2.5-free` (OpenCode Zen)
+  - `claude-haiku-4-5-20251001` → `openai/gpt-oss-120b` (NVIDIA NIM, 2 API keys, load balanced)
+  - `agnes-2.0-flash` → `agnes-2.0-flash` (Agnes AI)
+- **Load Balancing**: `simple-shuffle` strategy distributes requests across NVIDIA API keys per model
+- **Fallbacks**: Automatic fallback chains (e.g., `claude-sonnet-5` → `agnes-2.0-flash`)
 - **Parameter Handling**: `drop_params: true` ensures cross-provider compatibility
 - **Anthropic Routing**: `use_chat_completions_url_for_anthropic_messages: true` routes all providers via `/v1/chat/completions`
 
