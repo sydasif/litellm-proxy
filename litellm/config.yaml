@@ -21,7 +21,7 @@ model_list:
       api_key: os.environ/NVIDIA_API_KEY_1
       extra_body:
         chat_template_kwargs:
-          enable_thinking: true
+          enable_thinking: false
 
   - model_name: nemotron-3-ultra
     litellm_params:
@@ -29,7 +29,7 @@ model_list:
       api_key: os.environ/NVIDIA_API_KEY_2
       extra_body:
         chat_template_kwargs:
-          enable_thinking: true
+          enable_thinking: false
 
   - model_name: mimo-v2.5
     litellm_params:
