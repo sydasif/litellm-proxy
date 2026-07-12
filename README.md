@@ -5,6 +5,10 @@
 [![OpenCode Zen](https://img.shields.io/badge/Backend-OpenCode%20Zen-6C47FF?style=for-the-badge)](https://opencode.ai)
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 
+<p align="center">
+  <img src="logo.png" alt="LiteLLM Proxy Logo" width="200" height="200">
+</p>
+
 A proxy gateway that routes **Claude Code** through **LiteLLM** (Python) to multiple AI backend providers with load balancing and parameter normalization.
 
 ## Features
