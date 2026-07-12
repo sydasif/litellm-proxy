@@ -39,16 +39,27 @@ docker compose down
 docker compose logs -f
 ```
 
-### Configuration
+### Router & Load Balancing
 
-Modify `litellm/config.yaml` to adjust providers, load balancing, fallbacks, or parameter normalization. Key settings:
+- **Routing Strategy**: `latency-based-routing` – selects the deployment with the lowest recent response time.
+- **Retries**: `3` attempts per request.
+- **Per‑Model Timeouts** (seconds):
+  - `nemotron-3-ultra-550b-a55b`: 180
+  - `qwen3.5-397b-a17b`: 120
+  - `mimo-v2.5-free`: 45
+  - `hy3-free`: 45
+  - `nemotron-3-nano-30b-a3b`: 30
+  - `gpt-oss-120b`: 30
+- **Fallback Mappings**:
+  - `claude-opus-4-8` → `claude-sonnet-5`
+  - `claude-haiku-4-5-20251001` → `claude-sonnet-5`
+- **Allowed Fails**: `2` – a deployment is marked unhealthy after two consecutive failures.
+- **Cooldown Time**: `30` s before a failed deployment can be retried.
+- **Pre‑call Checks**: enabled – health checks run before routing each request.
+- **Parameter Handling**: `drop_params: true` ensures cross‑provider compatibility.
+- **Anthropic Routing**: `use_chat_completions_url_for_anthropic_messages: true` routes all providers via `/v1/chat/completions`.
 
-- Load balancing: `simple-shuffle` across NVIDIA API keys
-- Fallbacks: `mimo-v2.5` → `agnes-2.0-flash`
-- Parameter normalization: `drop_params: true`
-- Anthropic routing: `use_chat_completions_url_for_anthropic_messages: true`
-
-After config changes: `docker compose restart`
+After any change to these settings, restart the proxy (`docker compose restart`) so the new router configuration takes effect.
 
 ### Testing
 

@@ -104,15 +104,7 @@ litellm-proxy/
 
 ### Configuration Details (`litellm/config.yaml`)
 
-- **Model Aliases**: Configured aliases map to backend providers:
-  - `claude-opus-4-8` → `nvidia/nemotron-3-ultra-550b-a55b` (NVIDIA NIM, 2 API keys, load balanced)
-  - `claude-sonnet-5` → `mimo-v2.5-free` (OpenCode Zen)
-  - `claude-haiku-4-5-20251001` → `openai/gpt-oss-120b` (NVIDIA NIM, 2 API keys, load balanced)
-  - `agnes-2.0-flash` → `agnes-2.0-flash` (Agnes AI)
-- **Load Balancing**: `simple-shuffle` strategy distributes requests across NVIDIA API keys per model
-- **Fallbacks**: Automatic fallback chains (e.g., `claude-sonnet-5` → `agnes-2.0-flash`)
-- **Parameter Handling**: `drop_params: true` ensures cross-provider compatibility
-- **Anthropic Routing**: `use_chat_completions_url_for_anthropic_messages: true` routes all providers via `/v1/chat/completions`
+For detailed router and load‑balancing settings (routing strategy, retries, per‑model timeouts, fallbacks, allowed fails, cooldown, pre‑call checks, etc.), see **CLAUDE.md**.
 
 ## Maintenance
 

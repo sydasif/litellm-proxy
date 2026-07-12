@@ -9,11 +9,8 @@ model_list:
 
   - model_name: claude-opus-4-8
     litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
+      model: nvidia_nim/qwen/qwen3.5-397b-a17b
       api_key: os.environ/NVIDIA_API_KEY_2
-      extra_body:
-        chat_template_kwargs:
-          thinking: false
 
   - model_name: claude-sonnet-5
     litellm_params:
@@ -21,10 +18,19 @@ model_list:
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
 
+  - model_name: claude-sonnet-5
+    litellm_params:
+      model: openai/hy3-free
+      api_base: https://opencode.ai/zen/v1
+      api_key: os.environ/OPENCODE_API_KEY
+
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
-      model: nvidia_nim/openai/gpt-oss-120b
+      model: nvidia_nim/nvidia/nemotron-3-nano-30b-a3b
       api_key: os.environ/NVIDIA_API_KEY_1
+      extra_body:
+        chat_template_kwargs:
+          thinking: false
 
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
@@ -42,6 +48,17 @@ litellm_settings:
   use_chat_completions_url_for_anthropic_messages: true
 
 router_settings:
-  routing_strategy: simple-shuffle
-  num_retries: 1
-  timeout: 120
+  routing_strategy: latency-based-routing
+  num_retries: 3
+  timeout:
+    nemotron-3-ultra-550b-a55b: 180
+    qwen3.5-397b-a17b: 180
+    mimo-v2.5-free: 120
+    hy3-free: 120
+    nemotron-3-nano-30b-a3b: 60
+    gpt-oss-120b: 60
+  fallbacks:
+    - model: claude-sonnet-5
+  allowed_fails: 2
+  cooldown_time: 30
+  enable_pre_call_checks: true
