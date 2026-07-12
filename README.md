@@ -1,12 +1,14 @@
 # AI Proxy Gateway
 
-[![LiteLLM](https://img.shields.io/badge/Powered%20by-LiteLLM-blueviolet?style=for-the-badge)](https://github.com/BerriAI/litellm)
-[![Claude Code](https://img.shields.io/badge/Claude%20Code-D97757?style=for-the-badge&logo=anthropic&logoColor=white)](https://claude.com/product/claude-code)
-[![OpenCode Zen](https://img.shields.io/badge/Backend-OpenCode%20Zen-6C47FF?style=for-the-badge)](https://opencode.ai)
-[![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
-
 <p align="center">
   <img src="logo.png" alt="LiteLLM Proxy Logo" width="200" height="200">
+</p>
+
+<p align="center">
+  <a href="https://github.com/BerriAI/litellm"><img src="https://img.shields.io/badge/Powered%20by-LiteLLM-blueviolet?style=for-the-badge" alt="LiteLLM"></a>
+  <a href="https://claude.com/product/claude-code"><img src="https://img.shields.io/badge/Claude%20Code-D97757?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code"></a>
+  <a href="https://opencode.ai"><img src="https://img.shields.io/badge/Backend-OpenCode%20Zen-6C47FF?style=for-the-badge" alt="OpenCode Zen"></a>
+  <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white" alt="Docker"></a>
 </p>
 
 A proxy gateway that routes **Claude Code** through **LiteLLM** (Python) to multiple AI backend providers with load balancing and parameter normalization.
