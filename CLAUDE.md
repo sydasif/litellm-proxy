@@ -8,7 +8,7 @@ AI Proxy Gateway that routes Claude Code through LiteLLM to multiple AI backend 
 
 ## Project Structure
 
-```
+```bash
 litellm-proxy/
 ├── docker-compose.yml          # Docker Compose configuration
 ├── .env                        # API keys (gitignored)
