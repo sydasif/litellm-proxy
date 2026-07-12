@@ -5,11 +5,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/BerriAI/litellm"><img src="https://img.shields.io/badge/Powered%20by-LiteLLM-blueviolet?style=for-the-badge" alt="LiteLLM"></a>
   <a href="https://claude.com/product/claude-code"><img src="https://img.shields.io/badge/Claude%20Code-D97757?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code"></a>
   <a href="https://build.nvidia.com/"><img src="https://img.shields.io/badge/NVIDIA%20NIM-76B900?style=for-the-badge&logo=nvidia&logoColor=white" alt="NVIDIA NIM"></a>
-  <a href="https://opencode.ai"><img src="https://img.shields.io/badge/Backend-OpenCode%20Zen-6C47FF?style=for-the-badge" alt="OpenCode Zen"></a>
-  <a href="https://agnesai.com"><img src="https://img.shields.io/badge/Backend-Agnes%20AI-FF6B6B?style=for-the-badge" alt="Agnes AI"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python"></a>
   <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white" alt="Docker"></a>
 </p>
