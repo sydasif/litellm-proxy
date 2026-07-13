@@ -49,4 +49,5 @@ litellm_settings:
 
 router_settings:
   routing_strategy: simple-shuffle
-
+  num_retries: 2
+  timeout: 30
