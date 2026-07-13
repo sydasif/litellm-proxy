@@ -48,7 +48,5 @@ litellm_settings:
   use_chat_completions_url_for_anthropic_messages: true
 
 router_settings:
-  routing_strategy: latency-based-routing
-  num_retries: 3
-  fallbacks:
-    - model: claude-sonnet-5
+  routing_strategy: simple-shuffle
+
