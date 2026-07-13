@@ -102,7 +102,7 @@ litellm-proxy/
 
 ### Configuration Details (`litellm/config.yaml`)
 
-For detailed router and load‑balancing settings (routing strategy, retries, per‑model timeouts, fallbacks, allowed fails, cooldown, pre‑call checks, etc.), see **CLAUDE.md**.
+For detailed router and load-balancing settings (routing strategy, retries, fallbacks, allowed fails, cooldown, pre-call checks, etc.), see **CLAUDE.md**.
 
 ## Maintenance
 

@@ -15,14 +15,12 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 | Virtual Model               | Backend Model                       | Provider     |
 | --------------------------- | ----------------------------------- | ------------ |
 | `claude-opus-4-8`           | `nvidia/nemotron-3-ultra-550b-a55b` | NVIDIA NIM   |
-| `claude-opus-4-8`           | `qwen/qwen3.5-397b-a17b`            | NVIDIA NIM   |
 | `claude-sonnet-5`           | `mimo-v2.5-free`                    | OpenCode Zen |
 | `claude-sonnet-5`           | `hy3-free`                          | OpenCode Zen |
-| `claude-haiku-4-5-20251001` | `nvidia/nemotron-3-nano-30b-a3b`    | NVIDIA NIM   |
 | `claude-haiku-4-5-20251001` | `gpt-oss-120b`                      | NVIDIA NIM   |
 | `agnes-2.0-flash`           | `agnes-2.0-flash`                   | Agnes AI     |
 
-**Special settings:** `nemotron-3-ultra-550b-a55b` and `nemotron-3-nano-30b-a3b` use `thinking: false` to disable reasoning output.
+**Special settings:** `nemotron-3-ultra-550b-a55b` uses `thinking: false` to disable reasoning output.
 
 ## Development Commands
 
@@ -45,25 +43,23 @@ python -c "import yaml; yaml.safe_load(open('litellm/config.yaml'))"
 
 ## Router Configuration (`litellm/config.yaml`)
 
+**Explicitly configured settings:**
+
 | Setting                                           | Value                   | Description                                                                 |
 | ------------------------------------------------- | ----------------------- | --------------------------------------------------------------------------- |
 | `routing_strategy`                                | `latency-based-routing` | Selects fastest responding deployment                                       |
 | `num_retries`                                     | `3`                     | Attempts per request                                                        |
-| `allowed_fails`                                   | `2`                     | Deployment marked unhealthy after 2 consecutive failures                    |
-| `cooldown_time`                                   | `30`                    | Seconds before retrying failed deployment                                   |
-| `enable_pre_call_checks`                          | `true`                  | Health checks before routing                                                |
 | `fallbacks`                                       | `claude-sonnet-5`       | Default fallback model                                                      |
 | `drop_params`                                     | `true`                  | Strips unsupported parameters for cross-provider compatibility              |
 | `use_chat_completions_url_for_anthropic_messages` | `true`                  | Routes all providers via `/v1/chat/completions` for Anthropic compatibility |
 
-**Per-model timeouts (seconds):**
+**LiteLLM built-in defaults (not explicitly set in config.yaml):**
 
-- `nemotron-3-ultra-550b-a55b`: 180
-- `qwen3.5-397b-a17b`: 180
-- `mimo-v2.5-free`: 120
-- `hy3-free`: 120
-- `nemotron-3-nano-30b-a3b`: 60
-- `gpt-oss-120b`: 60
+| Setting                   | Default | Description                                                                 |
+| ------------------------- | ------- | --------------------------------------------------------------------------- |
+| `allowed_fails`           | `2`     | Deployment marked unhealthy after 2 consecutive failures                    |
+| `cooldown_time`           | `30`    | Seconds before retrying failed deployment                                   |
+| `enable_pre_call_checks`  | `true`  | Health checks before routing                                                |
 
 ## Testing
 
