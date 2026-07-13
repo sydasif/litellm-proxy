@@ -45,21 +45,21 @@ python -c "import yaml; yaml.safe_load(open('litellm/config.yaml'))"
 
 **Explicitly configured settings:**
 
-| Setting                                           | Value                   | Description                                                                 |
-| ------------------------------------------------- | ----------------------- | --------------------------------------------------------------------------- |
-| `routing_strategy`                                | `latency-based-routing` | Selects fastest responding deployment                                       |
-| `num_retries`                                     | `3`                     | Attempts per request                                                        |
-| `fallbacks`                                       | `claude-sonnet-5`       | Default fallback model                                                      |
-| `drop_params`                                     | `true`                  | Strips unsupported parameters for cross-provider compatibility              |
-| `use_chat_completions_url_for_anthropic_messages` | `true`                  | Routes all providers via `/v1/chat/completions` for Anthropic compatibility |
+| Setting                                           | Value            | Description                                                                 |
+| ------------------------------------------------- | ---------------- | --------------------------------------------------------------------------- |
+| `routing_strategy`                                | `simple-shuffle` | Randomly distributes requests across deployments                            |
+| `drop_params`                                     | `true`           | Strips unsupported parameters for cross-provider compatibility              |
+| `use_chat_completions_url_for_anthropic_messages` | `true`           | Routes all providers via `/v1/chat/completions` for Anthropic compatibility |
 
 **LiteLLM built-in defaults (not explicitly set in config.yaml):**
 
-| Setting                   | Default | Description                                                                 |
-| ------------------------- | ------- | --------------------------------------------------------------------------- |
-| `allowed_fails`           | `2`     | Deployment marked unhealthy after 2 consecutive failures                    |
-| `cooldown_time`           | `30`    | Seconds before retrying failed deployment                                   |
-| `enable_pre_call_checks`  | `true`  | Health checks before routing                                                |
+| Setting                  | Default | Description                                              |
+| ------------------------ | ------- | -------------------------------------------------------- |
+| `allowed_fails`          | `2`     | Deployment marked unhealthy after 2 consecutive failures |
+| `cooldown_time`          | `30`    | Seconds before retrying failed deployment                |
+| `enable_pre_call_checks` | `true`  | Health checks before routing                             |
+| `num_retries`            | `0`     | No retries by default (was previously set to 3)          |
+| `fallbacks`              | `[]`    | No default fallback (was previously `claude-sonnet-5`)   |
 
 ## Testing
 

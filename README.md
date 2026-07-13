@@ -20,8 +20,7 @@ A proxy gateway that routes **Claude Code** through **LiteLLM** (Python) to mult
 ## Features
 
 - **Multi-provider routing**: Access NVIDIA NIM, OpenCode Zen, and Agnes AI through a single endpoint
-- **Load balancing**: Distributes requests across multiple NVIDIA API keys using `latency-based-routing` strategy
-- **Automatic fallbacks**: Models automatically fallback to `claude-sonnet-5` on failure
+- **Load balancing**: Distributes requests across multiple NVIDIA API keys using `simple-shuffle` strategy
 - **Parameter normalization**: Drops unsupported parameters (`drop_params: true`) for cross-provider compatibility
 - **Anthropic compatibility**: Routes all providers via `/v1/chat/completions` endpoint for seamless Claude Code integration
 - **Dockerized**: Uses official Docker Hub LiteLLM image for consistent deployment
