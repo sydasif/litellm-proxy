@@ -25,6 +25,12 @@ A proxy gateway that routes **Claude Code** through **LiteLLM** (Python) to mult
 - **Anthropic compatibility**: Routes all providers via `/v1/chat/completions` endpoint for seamless Claude Code integration
 - **Dockerized**: Uses official Docker Hub LiteLLM image for consistent deployment
 - **Secure**: API keys managed exclusively via environment variables
+- **Admin UI**: Web dashboard at `http://localhost:4000/ui` for monitoring, virtual keys, and spend tracking
+- **Redis caching**: Caches repeated prompts for cost savings and latency reduction
+- **PostgreSQL backend**: Persistent storage for virtual keys, budgets, and spend logs
+- **Virtual keys**: Revocable API keys with budgets, rate limits, and model allowlists
+- **Automatic fallbacks**: Routes to backup models on failure (sonnet → haiku, opus → sonnet)
+- **Health checks**: Liveness (`/health/liveliness`) and readiness (`/health/readiness`) endpoints
 
 ## Prerequisites
 
@@ -39,25 +45,43 @@ A proxy gateway that routes **Claude Code** through **LiteLLM** (Python) to mult
 git clone <repository-url>
 cd litellm-proxy
 cp .env.example .env
-# Edit .env with your API keys
+# Edit .env with your API keys (required: NVIDIA_API_KEY_1, NVIDIA_API_KEY_2, OPENCODE_API_KEY, AGNES_API_KEY)
 
-# 2. Start the proxy
+# 2. Generate required keys
+# Master key (for admin API access):
+openssl rand -hex 24 | sed 's/^/sk-/'
+# Salt key (for DB encryption - SAVE THIS SECURELY, CANNOT BE ROTATED):
+openssl rand -base64 32
+
+# 3. Start the proxy stack
 docker compose up -d
 
-# 3. Verify
-curl http://localhost:4000/v1/models
+# 4. Verify
+curl http://localhost:4000/health/liveliness
+# "I'm alive!"
+
+curl http://localhost:4000/health/readiness
+# {"status":"healthy","db":"connected"}
 ```
 
 ## Configuration
 
 ### Environment Variables (`.env`)
 
-| Variable           | Provider     | Description                          |
-| ------------------ | ------------ | ------------------------------------ |
-| `NVIDIA_API_KEY_1` | NVIDIA NIM   | Primary API key for Nemotron 3 Ultra |
-| `NVIDIA_API_KEY_2` | NVIDIA NIM   | Secondary API key for load balancing |
-| `OPENCODE_API_KEY` | OpenCode Zen | API key for OpenCode Zen models      |
-| `AGNES_API_KEY`    | Agnes AI     | API key for Agnes 2.0 Flash          |
+| Variable             | Required | Description                                                                                            |
+| -------------------- | -------- | ------------------------------------------------------------------------------------------------------ |
+| `LITELLM_MASTER_KEY` | Yes      | Admin API key (must start with `sk-`). Generate: `openssl rand -hex 24 \| sed 's/^/sk-/'`              |
+| `LITELLM_SALT_KEY`   | Yes      | DB encryption key (base64). **Cannot be rotated after first use!** Generate: `openssl rand -base64 32` |
+| `POSTGRES_PASSWORD`  | Yes      | PostgreSQL password                                                                                    |
+| `REDIS_PASSWORD`     | Yes      | Redis password                                                                                         |
+| `UI_USERNAME`        | No       | Admin UI basic auth username (default: `admin`)                                                        |
+| `UI_PASSWORD`        | No       | Admin UI basic auth password                                                                           |
+| `NVIDIA_API_KEY_1`   | Yes*     | Primary NVIDIA NIM API key (Nemotron 3 Ultra, GPT-OSS 120B)                                            |
+| `NVIDIA_API_KEY_2`   | Yes*     | Secondary NVIDIA NIM API key for load balancing                                                        |
+| `OPENCODE_API_KEY`   | Yes*     | OpenCode Zen API key (mimo-v2.5-free, hy3-free)                                                        |
+| `AGNES_API_KEY`      | Yes*     | Agnes AI API key (agnes-2.0-flash)                                                                     |
+
+*At least one provider's keys required. Missing keys = those models return 401.
 
 Copy `.env.example` to `.env` and fill in your keys.
 
@@ -78,11 +102,20 @@ Copy `.env.example` to `.env` and fill in your keys.
 - `allowed_fails: 2` — mark deployment unhealthy after 2 failures
 - `cooldown_time: 30` — seconds before retrying failed deployment
 - `enable_pre_call_checks: true` — health check before routing
+- `redis_host/port/password` — Redis for cross-worker rate limiting
+
+**Fallbacks** (`router_settings.fallbacks`):
+
+- `claude-sonnet-5` → `claude-haiku-4-5-20251001`
+- `claude-opus-4-8` → `claude-sonnet-5`
+- Context window fallbacks: sonnet → haiku
+- Content policy fallbacks: opus → sonnet
 
 **LiteLLM Settings** (`litellm_settings`):
 
 - `drop_params: true` — drop unsupported parameters for cross-provider compatibility
 - `use_chat_completions_url_for_anthropic_messages: true` — route via `/v1/chat/completions`
+- `cache: true` + `cache_params.type: redis` — Redis response caching
 
 ## Usage
 
@@ -98,11 +131,12 @@ Add to your shell profile (`~/.bashrc`, `~/.zshrc`, `~/.profile`) and restart yo
 ### Test the Proxy
 
 ```bash
-# List available models
-curl http://localhost:4000/v1/models
+# List available models (requires auth)
+curl -H "Authorization: Bearer <YOUR_VIRTUAL_KEY>" http://localhost:4000/v1/models
 
 # Chat completion
 curl -X POST http://localhost:4000/v1/chat/completions \
+  -H "Authorization: Bearer <YOUR_VIRTUAL_KEY>" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "claude-opus-4-8",
@@ -110,6 +144,54 @@ curl -X POST http://localhost:4000/v1/chat/completions \
     "max_tokens": 100
   }'
 ```
+
+### Virtual Key Management
+
+```bash
+# Generate a virtual key with budget and rate limits
+# (Use master key for admin operations)
+curl -X POST http://localhost:4000/key/generate \
+  -H "Authorization: Bearer <MASTER_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "models": ["claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5-20251001", "agnes-2.0-flash"],
+    "max_budget": 50,
+    "budget_duration": "30d",
+    "rpm_limit": 60,
+    "metadata": {"team": "engineering", "owner": "user@example.com"}
+  }'
+
+# Check key info
+curl -H "Authorization: Bearer <MASTER_KEY>" \
+  "http://localhost:4000/key/info?key=<VIRTUAL_KEY>"
+
+# List all keys
+curl -H "Authorization: Bearer <MASTER_KEY>" \
+  http://localhost:4000/key/list
+
+# Revoke a key
+curl -X POST http://localhost:4000/key/delete \
+  -H "Authorization: Bearer <MASTER_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{"key": "<VIRTUAL_KEY>"}'
+
+# Spend report
+curl -H "Authorization: Bearer <MASTER_KEY>" \
+  "http://localhost:4000/global/spend/report"
+```
+
+### Admin UI
+
+Open `http://localhost:4000/ui` in your browser (basic auth: `admin` / `changeme123` by default).
+
+Features:
+
+- **Dashboard**: Overview of spend, requests, latency
+- **Virtual Keys**: Create, revoke, view usage per key
+- **Teams**: Organize keys by team with shared budgets
+- **Models**: View registered models and their status
+- **Logs**: Search request logs with filters
+- **Spend Reports**: Per-team, per-model cost breakdown
 
 ### Available Models
 
@@ -124,7 +206,7 @@ curl -X POST http://localhost:4000/v1/chat/completions \
 
 ```
 litellm-proxy/
-├── docker-compose.yml          # Docker Compose configuration for LiteLLM
+├── docker-compose.yml          # Docker Compose (LiteLLM + Postgres + Redis)
 ├── .env                        # API keys (gitignored)
 ├── .env.example                # Template for environment variables
 ├── .gitignore
@@ -134,16 +216,28 @@ litellm-proxy/
     └── config.yaml             # LiteLLM provider configuration
 ```
 
+## Services
+
+| Service    | Port | Description                       |
+| ---------- | ---- | --------------------------------- |
+| LiteLLM    | 4000 | Main proxy API, Admin UI          |
+| PostgreSQL | 5432 | Virtual keys, spend logs, budgets |
+| Redis      | 6379 | Response caching, rate limiting   |
+
 ## Maintenance
 
-| Task                         | Command                                       |
-| ---------------------------- | --------------------------------------------- |
-| Update API keys              | Edit `.env` file                              |
-| Modify routing/providers     | Edit `litellm/config.yaml`, then restart      |
-| Restart after config changes | `docker compose down && docker compose up -d` |
-| Update LiteLLM image         | `docker compose pull && docker compose up -d` |
-| View logs                    | `docker compose logs -f`                      |
-| Check container status       | `docker compose ps`                           |
+| Task                         | Command                                        |
+| ---------------------------- | ---------------------------------------------- |
+| Update API keys              | Edit `.env` file, then restart                 |
+| Modify routing/providers     | Edit `litellm/config.yaml`, then restart       |
+| Restart after config changes | `docker compose down && docker compose up -d`  |
+| Update LiteLLM image         | `docker compose pull && docker compose up -d`  |
+| View logs                    | `docker compose logs -f`                       |
+| Check container status       | `docker compose ps`                            |
+| Admin UI                     | `http://localhost:4000/ui`                     |
+| Generate virtual key         | `curl -X POST ... /key/generate`               |
+| Health check (liveness)      | `curl http://localhost:4000/health/liveliness` |
+| Health check (readiness)     | `curl http://localhost:4000/health/readiness`  |
 
 ## Contributing
 
