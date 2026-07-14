@@ -45,24 +45,62 @@ A proxy gateway that routes **Claude Code** through **LiteLLM** (Python) to mult
 git clone <repository-url>
 cd litellm-proxy
 cp .env.example .env
-# Edit .env with your API keys (required: NVIDIA_API_KEY_1, NVIDIA_API_KEY_2, OPENCODE_API_KEY, AGNES_API_KEY)
 
-# 2. Generate required keys
-# Master key (for admin API access):
-openssl rand -hex 24 | sed 's/^/sk-/'
-# Salt key (for DB encryption - SAVE THIS SECURELY, CANNOT BE ROTATED):
-openssl rand -base64 32
+# 2. Generate required keys and populate .env (run these 4 lines)
+LITELLM_MASTER_KEY="sk-$(openssl rand -hex 24)"
+LITELLM_SALT_KEY="$(openssl rand -base64 32)"
+POSTGRES_PASSWORD="$(openssl rand -base64 16)"
+REDIS_PASSWORD="$(openssl rand -base64 16)"
 
-# 3. Start the proxy stack
+# Write to .env
+cat > .env <<EOF
+LITELLM_MASTER_KEY=$LITELLM_MASTER_KEY
+LITELLM_SALT_KEY=$LITELLM_SALT_KEY
+POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+REDIS_PASSWORD=$REDIS_PASSWORD
+UI_USERNAME=admin
+UI_PASSWORD=changeme123
+EOF
+
+# 3. Add YOUR provider API keys to .env (edit the file)
+# Required: NVIDIA_API_KEY_1, NVIDIA_API_KEY_2, OPENCODE_API_KEY, AGNES_API_KEY
+
+# 3. Add YOUR provider API keys to .env
+# Required: NVIDIA_API_KEY_1, NVIDIA_API_KEY_2, OPENCODE_API_KEY, AGNES_API_KEY
+# Edit .env with your keys
+
+# 4. Start the proxy stack
 docker compose up -d
 
-# 4. Verify
-curl http://localhost:4000/health/liveliness
-# "I'm alive!"
+# 5. Verify
+curl http://localhost:4000/health/liveliness   # "I'm alive!"
+curl http://localhost:4000/health/readiness   # {"status":"healthy","db":"connected"}
 
-curl http://localhost:4000/health/readiness
-# {"status":"healthy","db":"connected"}
+# 6. Create a virtual key (use for apps, NOT master key)
+VKEY=$(curl -s -X POST http://localhost:4000/key/generate \
+  -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"models": ["claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5-20251001", "agnes-2.0-flash"], "max_budget": 50, "budget_duration": "30d", "rpm_limit": 60}' | jq -r .key)
+
+# 7. Test with virtual key
+curl -H "Authorization: Bearer $VKEY" http://localhost:4000/v1/models
+curl -X POST http://localhost:4000/v1/chat/completions \
+  -H "Authorization: Bearer $VKEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "claude-opus-4-8", "messages": [{"role": "user", "content": "Hello!"}], "max_tokens": 50}'
+
+# 8. Open Admin UI
+# http://localhost:4000/ui  (user: admin, pass: changeme123)
 ```
+
+### Configure Claude Code
+
+```bash
+export ANTHROPIC_AUTH_TOKEN=$VKEY
+export ANTHROPIC_BASE_URL=http://localhost:4000
+```
+
+Add to your shell profile (`~/.bashrc`, `~/.zshrc`, `~/.profile`) and restart your terminal.
 
 ## Configuration
 
