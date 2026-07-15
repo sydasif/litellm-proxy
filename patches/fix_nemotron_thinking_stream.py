@@ -145,6 +145,7 @@ def _patch_streaming(path: str) -> bool:
     The original code opened the very first block as an empty text block
     unconditionally. We keep that for compatibility but additionally guard the
     block-transition so a thinking_delta is never emitted into a text block.
+    Also fix _should_start_new_content_block to handle empty choices list.
     """
     with io.open(path, encoding="utf-8") as fh:
         src = fh.read()
@@ -219,6 +220,28 @@ def _patch_streaming(path: str) -> bool:
     if async_old in src:
         src = src.replace(async_old, async_new)
         count += 1
+
+    # --- Fix _should_start_new_content_block to handle empty choices ---
+    # The method accesses chunk.choices[0] without checking if choices is empty.
+    # This causes IndexError when the upstream sends an empty chunk.
+    guard_old = (
+        '        # Example logic - customize based on your needs:\n'
+        '        # If chunk indicates a tool call\n'
+        '        if chunk.choices[0].finish_reason is not None:\n'
+        '            return False\n'
+    )
+    guard_new = (
+        '        # Example logic - customize based on your needs:\n'
+        '        # If chunk indicates a tool call\n'
+        '        if not chunk.choices:\n'
+        '            return False\n'
+        '        if chunk.choices[0].finish_reason is not None:\n'
+        '            return False\n'
+    )
+    if guard_old in src:
+        src = src.replace(guard_old, guard_new)
+        count += 1
+        print("PATCHED streaming_iterator.py: added empty-choices guard in _should_start_new_content_block")
 
     if count == 0:
         print("SKIP streaming_iterator.py transition: target blocks not found (already patched or version mismatch)")
