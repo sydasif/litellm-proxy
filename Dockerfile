@@ -1,4 +1,8 @@
-FROM docker.litellm.ai/berriai/litellm-database:main-stable
+FROM docker.litellm.ai/berriai/litellm-database:1.92.0
+
+# Pinned to a specific release for reproducible builds. Bump this tag together
+# with re-verifying the patch in patches/fix_nemotron_thinking_stream.py still
+# applies (it prints SKIP lines if the target source strings changed).
 
 # Fix "Content block is not a thinking block" when serving NVIDIA NIM /
 # Nemotron 3 Ultra through LiteLLM's Anthropic /v1/messages adapter with
