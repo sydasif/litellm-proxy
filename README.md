@@ -23,7 +23,7 @@ A proxy gateway that routes **Claude Code** through **LiteLLM** (Python) to mult
 - **Load balancing**: Distributes requests across multiple NVIDIA API keys using `simple-shuffle` strategy
 - **Parameter normalization**: Drops unsupported parameters (`drop_params: true`) for cross-provider compatibility
 - **Anthropic compatibility**: Routes all providers via `/v1/chat/completions` endpoint for seamless Claude Code integration
-- **Dockerized**: Uses official Docker Hub LiteLLM image for consistent deployment
+- **Dockerized**: Builds a patched LiteLLM image (`litellm-proxy:patched`) that fixes the Nemotron thinking-stream bug
 - **Secure**: API keys managed exclusively via environment variables
 - **Admin UI**: Web dashboard at `http://localhost:4000/ui` for monitoring, virtual keys, and spend tracking
 - **Redis caching**: Caches repeated prompts for cost savings and latency reduction
@@ -245,6 +245,9 @@ Features:
 ```
 litellm-proxy/
 ├── docker-compose.yml          # Docker Compose (LiteLLM + Postgres + Redis)
+├── Dockerfile                  # Builds litellm-proxy:patched from official image
+├── patches/
+│   └── fix_nemotron_thinking_stream.py  # Patches LiteLLM SSE streaming bug
 ├── .env                        # API keys (gitignored)
 ├── .env.example                # Template for environment variables
 ├── .gitignore
@@ -264,18 +267,19 @@ litellm-proxy/
 
 ## Maintenance
 
-| Task                         | Command                                        |
-| ---------------------------- | ---------------------------------------------- |
-| Update API keys              | Edit `.env` file, then restart                 |
-| Modify routing/providers     | Edit `litellm/config.yaml`, then restart       |
-| Restart after config changes | `docker compose down && docker compose up -d`  |
-| Update LiteLLM image         | `docker compose pull && docker compose up -d`  |
-| View logs                    | `docker compose logs -f`                       |
-| Check container status       | `docker compose ps`                            |
-| Admin UI                     | `http://localhost:4000/ui`                     |
-| Generate virtual key         | `curl -X POST ... /key/generate`               |
-| Health check (liveness)      | `curl http://localhost:4000/health/liveliness` |
-| Health check (readiness)     | `curl http://localhost:4000/health/readiness`  |
+| Task                         | Command                                                           |
+| ---------------------------- | ----------------------------------------------------------------- |
+| Update API keys              | Edit `.env` file, then restart                                    |
+| Modify routing/providers     | Edit `litellm/config.yaml`, then restart                          |
+| Restart after config changes | `docker compose down && docker compose up -d`                     |
+| Rebuild patched image        | `docker compose build --no-cache litellm && docker compose up -d` |
+| Update LiteLLM base image    | Bump tag in `Dockerfile`, rebuild, re-verify patch applies        |
+| View logs                    | `docker compose logs -f`                                          |
+| Check container status       | `docker compose ps`                                               |
+| Admin UI                     | `http://localhost:4000/ui`                                        |
+| Generate virtual key         | `curl -X POST ... /key/generate`                                  |
+| Health check (liveness)      | `curl http://localhost:4000/health/liveliness`                    |
+| Health check (readiness)     | `curl http://localhost:4000/health/readiness`                     |
 
 ## Contributing
 
