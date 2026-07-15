@@ -1,6 +1,9 @@
 services:
   litellm:
-    image: docker.litellm.ai/berriai/litellm-database:main-stable
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: litellm-proxy:patched
     container_name: litellm
     ports:
       - "4000:4000"
