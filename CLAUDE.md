@@ -4,32 +4,42 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, Agnes AI) with load balancing and parameter normalization. Uses Docker Compose to deploy a patched LiteLLM image that fixes the Nemotron thinking-stream bug.
+AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen) with load balancing, rate limiting, and fallback chains. Uses Docker Compose to deploy a patched LiteLLM image that fixes Nemotron thinking-stream and empty-choices streaming bugs.
 
 ## Architecture
 
-**Model aliasing:** Virtual model names (e.g., `claude-opus-4-8`) map to real provider models. Clients request the virtual name; LiteLLM routes to the backend.
+**Model aliasing:** Virtual model names (e.g., `claude-opus-4-8`) map to real provider models. Clients request the virtual name; LiteLLM load-balances across multiple backend deployments per virtual model.
 
 **Backend deployments:**
 
-| Virtual Model               | Backend Model                       | Provider     |
-| --------------------------- | ----------------------------------- | ------------ |
-| `claude-opus-4-8`           | `nvidia/nemotron-3-ultra-550b-a55b` | NVIDIA NIM   |
-| `claude-sonnet-5`           | `mimo-v2.5-free`                    | OpenCode Zen |
-| `claude-sonnet-5`           | `hy3-free`                          | OpenCode Zen |
-| `claude-haiku-4-5-20251001` | `gpt-oss-120b`                      | NVIDIA NIM   |
-| `agnes-2.0-flash`           | `agnes-2.0-flash`                   | Agnes AI     |
+| Virtual Model               | Deployment 1 (OpenCode Zen, 30 RPM) | Deployment 2 (NVIDIA NIM, 40 RPM)                                                       |
+| --------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------- |
+| `claude-opus-4-8`           | `openai/mimo-v2.5-free`             | `nvidia/nemotron-3-ultra-550b-a55b` (key 1)                                             |
+| `claude-sonnet-5`           | `openai/hy3-free` (295B MoE)        | `nvidia/nemotron-4-340b-instruct` (key 2)                                               |
+| `claude-haiku-4-5-20251001` | —                                   | `nvidia/nemotron-3-nano-30b-a3b` (key 1) + `mistralai/mistral-7b-instruct-v0.3` (key 2) |
 
-**Special settings:** `nemotron-3-ultra-550b-a55b` uses `thinking: true` to enable reasoning output (chain-of-thought).
+**Rate limits (enforced via `enforce_model_rate_limits`):**
 
-## Patched Image (Nemotron thinking-stream fix)
+| Provider     | RPM | TPM     | Scope                      |
+| ------------ | --- | ------- | -------------------------- |
+| NVIDIA NIM   | 40  | 500,000 | Per API key (published)    |
+| OpenCode Zen | 30  | 100,000 | Per API key (conservative) |
 
-The official LiteLLM image emits a malformed Anthropic SSE stream when Nemotron 3 Ultra is served with streaming + thinking enabled: a chunk carrying both `reasoning_content` and text opens the block as `text` but receives a `thinking_delta`, which Claude Code rejects with `Content block is not a thinking block`.
+**Fallback chain:**
 
-The proxy builds a `litellm-proxy:patched` image (`Dockerfile`) that rewrites the two adapter files at build time via `patches/fix_nemotron_thinking_stream.py`:
+```
+claude-opus-4-8 → claude-sonnet-5 → claude-haiku-4-5-20251001
+```
 
-- `transformation.py` — reorders block-type detection so `reasoning_content` wins over `content`
-- `streaming_iterator.py` — guards against `thinking_delta` landing in a `text` block (sync + async paths)
+**NVIDIA NIM worker limits:** 32 concurrent requests per worker. Different models = different worker pools = independent limits. Using multiple API keys across different models doubles effective throughput.
+
+## Patched Image (Nemotron thinking-stream + empty-choices fix)
+
+The proxy builds a `litellm-proxy:patched` image (`Dockerfile`) that rewrites adapter files at build time via `patches/fix_nemotron_thinking_stream.py`:
+
+1. **transformation.py** — Reorders block-type detection so `reasoning_content` wins over `content`
+2. **streaming_iterator.py** — Guards against `thinking_delta` landing in a `text` block (sync + async paths)
+3. **streaming_iterator.py** — Adds empty-choices guard to prevent `IndexError: list index out of range` on empty upstream chunks
 
 **To rebuild after config or base-image changes:**
 
@@ -37,7 +47,7 @@ The proxy builds a `litellm-proxy:patched` image (`Dockerfile`) that rewrites th
 docker compose build --no-cache litellm && docker compose up -d
 ```
 
-**To verify the fix (raw SSE capture, no Claude Code in path):**
+**To verify the fix (raw SSE capture):**
 
 ```bash
 curl -sN 'http://localhost:4000/v1/messages?beta=true' \
@@ -47,14 +57,11 @@ curl -sN 'http://localhost:4000/v1/messages?beta=true' \
     "model": "claude-opus-4-8",
     "max_tokens": 512,
     "stream": true,
-    "thinking": {"type": "enabled", "budget_tokens": 1024},
     "messages": [{"role": "user", "content": "Hi"}]
   }'
 ```
 
-Expected: thinking deltas stay in the thinking block (`index: 1`), text deltas in the text block (`index: 2`). No `thinking_delta` should ever appear in a block declared as `text`.
-
-**Upgrade note:** Bumping the base image tag in `Dockerfile` requires re-verifying the patch still applies — the script prints `SKIP` if the target source strings changed.
+Expected: No `thinking_delta` in text blocks. No empty-choices crashes. Clean streaming.
 
 ## Development Commands
 
@@ -80,23 +87,18 @@ python -c "import yaml; yaml.safe_load(open('litellm/config.yaml'))"
 
 ## Router Configuration (`litellm/config.yaml`)
 
-**Explicitly configured settings:**
-
-| Setting                                           | Value            | Description                                                                 |
-| ------------------------------------------------- | ---------------- | --------------------------------------------------------------------------- |
-| `routing_strategy`                                | `simple-shuffle` | Randomly distributes requests across deployments                            |
-| `drop_params`                                     | `true`           | Strips unsupported parameters for cross-provider compatibility              |
-| `use_chat_completions_url_for_anthropic_messages` | `true`           | Routes all providers via `/v1/chat/completions` for Anthropic compatibility |
-
-**LiteLLM built-in defaults (not explicitly set in config.yaml):**
-
-| Setting                  | Default | Description                                              |
-| ------------------------ | ------- | -------------------------------------------------------- |
-| `allowed_fails`          | `2`     | Deployment marked unhealthy after 2 consecutive failures |
-| `cooldown_time`          | `30`    | Seconds before retrying failed deployment                |
-| `enable_pre_call_checks` | `true`  | Health checks before routing                             |
-| `num_retries`            | `0`     | No retries by default (was previously set to 3)          |
-| `fallbacks`              | `[]`    | No default fallback (was previously `claude-sonnet-5`)   |
+| Setting                                           | Value                       | Description                                                                 |
+| ------------------------------------------------- | --------------------------- | --------------------------------------------------------------------------- |
+| `routing_strategy`                                | `simple-shuffle`            | Randomly distributes requests across deployments with RPM-aware weighting   |
+| `num_retries`                                     | `2`                         | Retry each deployment 2x before fallback                                    |
+| `timeout`                                         | `90`                        | Request timeout in seconds                                                  |
+| `allowed_fails`                                   | `2`                         | Mark deployment unhealthy after 2 consecutive failures                      |
+| `cooldown_time`                                   | `30`                        | Seconds before retrying failed deployment                                   |
+| `enable_pre_call_checks`                          | `true`                      | Health checks before routing                                                |
+| `optional_pre_call_checks`                        | `enforce_model_rate_limits` | Hard-enforce RPM/TPM per deployment                                         |
+| `drop_params`                                     | `true`                      | Strips unsupported parameters for cross-provider compatibility              |
+| `use_chat_completions_url_for_anthropic_messages` | `true`                      | Routes all providers via `/v1/chat/completions` for Anthropic compatibility |
+| `fallbacks`                                       | `opus→sonnet→haiku`         | Automatic failover chain across model groups                                |
 
 ## Testing
 
@@ -107,11 +109,21 @@ curl http://localhost:4000/v1/models
 # Test chat completion
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
   -d '{
     "model": "claude-opus-4-8",
     "messages": [{"role": "user", "content": "Hello!"}],
     "max_tokens": 100
   }'
+
+# Check load balancing (should show different x-litellm-model-id headers)
+for i in {1..6}; do
+  curl -s -D - http://localhost:4000/v1/chat/completions \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
+    -d '{"model": "claude-opus-4-8", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 10}' | \
+    grep "x-litellm-model-id:"
+done
 ```
 
 ## Maintenance
