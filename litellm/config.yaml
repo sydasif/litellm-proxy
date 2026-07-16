@@ -1,5 +1,17 @@
 model_list:
-  # ===== claude-opus-4-8 -> Nemotron 3 Ultra (NVIDIA NIM, 40 RPM) =====
+  # ===== claude-opus-4-8 -> OpenCode mimo-v2.5-free (fast) =====
+  - model_name: claude-opus-4-8
+    litellm_params:
+      model: openai/mimo-v2.5-free
+      api_base: https://opencode.ai/zen/v1
+      api_key: os.environ/OPENCODE_API_KEY
+    rpm: 30
+    tpm: 100000
+    model_info:
+      input_cost_per_token: 0.000002
+      output_cost_per_token: 0.000010
+
+  # ===== claude-opus-4-8 -> NVIDIA Nemotron 3 Ultra (reasoning) =====
   - model_name: claude-opus-4-8
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
@@ -10,10 +22,22 @@ model_list:
       input_cost_per_token: 0.0000005
       output_cost_per_token: 0.0000022
 
-  # ===== claude-opus-4-8 -> Nemotron Ultra 253B (NVIDIA NIM, 40 RPM) — peer model =====
-  - model_name: claude-opus-4-8
+  # ===== claude-sonnet-5 -> OpenCode hy3-free (295B MoE) =====
+  - model_name: claude-sonnet-5
     litellm_params:
-      model: nvidia_nim/nvidia/llama-3.1-nemotron-ultra-253b-v1
+      model: openai/hy3-free
+      api_base: https://opencode.ai/zen/v1
+      api_key: os.environ/OPENCODE_API_KEY
+    rpm: 30
+    tpm: 100000
+    model_info:
+      input_cost_per_token: 0.000002
+      output_cost_per_token: 0.000010
+
+  # ===== claude-sonnet-5 -> NVIDIA Nemotron 4 340B (340B MoE peer) =====
+  - model_name: claude-sonnet-5
+    litellm_params:
+      model: nvidia_nim/nvidia/nemotron-4-340b-instruct
       api_key: os.environ/NVIDIA_API_KEY_1
     rpm: 40
     tpm: 100000
@@ -21,31 +45,7 @@ model_list:
       input_cost_per_token: 0.000001
       output_cost_per_token: 0.000001
 
-  # ===== claude-sonnet-5 -> OpenCode Zen (mimo-v2.5-free) =====
-  - model_name: claude-sonnet-5
-    litellm_params:
-      model: openai/mimo-v2.5-free
-      api_base: https://opencode.ai/zen/v1
-      api_key: os.environ/OPENCODE_API_KEY
-    rpm: 40
-    tpm: 100000
-    model_info:
-      input_cost_per_token: 0.000002
-      output_cost_per_token: 0.000010
-
-  # ===== claude-sonnet-5 -> OpenCode Zen (hy3-free) =====
-  - model_name: claude-sonnet-5
-    litellm_params:
-      model: openai/hy3-free
-      api_base: https://opencode.ai/zen/v1
-      api_key: os.environ/OPENCODE_API_KEY
-    rpm: 40
-    tpm: 100000
-    model_info:
-      input_cost_per_token: 0.000002
-      output_cost_per_token: 0.000010
-
-  # ===== claude-haiku-4-5-20251001 -> GPT-OSS-120b (NVIDIA NIM, 40 RPM) =====
+  # ===== claude-haiku-4-5-20251001 -> NVIDIA GPT-OSS-120b =====
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
       model: nvidia_nim/openai/gpt-oss-120b
@@ -56,7 +56,7 @@ model_list:
       input_cost_per_token: 0.00000015
       output_cost_per_token: 0.0000006
 
-  # ===== agnes-2.0-flash -> Agnes AI (20 RPM free tier) =====
+  # ===== agnes-2.0-flash -> Agnes AI =====
   - model_name: agnes-2.0-flash
     litellm_params:
       model: openai/agnes-2.0-flash
