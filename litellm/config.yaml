@@ -81,10 +81,14 @@ litellm_settings:
 router_settings:
   routing_strategy: simple-shuffle
   num_retries: 1
-  timeout: 30
+  timeout: 60
   enable_pre_call_checks: true
   optional_pre_call_checks:
     - enforce_model_rate_limits
+  fallbacks:
+    - claude-opus-4-8: ["agnes-2.0-flash"]
+    - claude-sonnet-5: ["agnes-2.0-flash"]
+    - claude-haiku-4-5-20251001: ["agnes-2.0-flash"]
   redis_host: os.environ/REDIS_HOST
   redis_port: os.environ/REDIS_PORT
   redis_password: os.environ/REDIS_PASSWORD
