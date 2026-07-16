@@ -270,5 +270,43 @@ def main() -> int:
     return 0 if ok else 1
 
 
+def _patch_streaming_empty_choices(path: str) -> bool:
+    """Patch streaming_iterator.py to handle empty choices in chunk."""
+    with io.open(path, "r", encoding="utf-8") as fh:
+        src = fh.read()
+
+    # Find the line: is_final_chunk = chunk.choices[0].finish_reason is not None
+    # Add guard before it - use try/except to skip empty choices cleanly
+    old_line = "                is_final_chunk = chunk.choices[0].finish_reason is not None"
+    new_lines = """                # Guard against empty choices (upstream sends empty chunk)
+                if not chunk.choices:
+                    continue  # skip to next chunk in stream
+                is_final_chunk = chunk.choices[0].finish_reason is not None"""
+
+    if old_line in src:
+        src = src.replace(old_line, new_lines)
+        with io.open(path, "w", encoding="utf-8") as fh:
+            fh.write(src)
+        print("PATCHED streaming_iterator.py: added empty-choices guard")
+        return True
+    else:
+        print("SKIP streaming_iterator.py empty-choices: target not found (already patched or version mismatch)")
+        return False
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    ok = True
+    if os.path.exists(TRANSFORM_FILE):
+        ok = _patch_transformation(TRANSFORM_FILE) and ok
+    else:
+        print(f"ERROR: {TRANSFORM_FILE} not found")
+        ok = False
+
+    if os.path.exists(STREAMING_FILE):
+        ok = _patch_streaming(STREAMING_FILE) and ok
+        ok = _patch_streaming_empty_choices(STREAMING_FILE) and ok
+    else:
+        print(f"ERROR: {STREAMING_FILE} not found")
+        ok = False
+
+    sys.exit(0 if ok else 1)

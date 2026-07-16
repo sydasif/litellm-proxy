@@ -1,59 +1,69 @@
 model_list:
+  # ===== claude-opus-4-8 -> Nemotron 3 Ultra (NVIDIA NIM, 40 RPM) =====
   - model_name: claude-opus-4-8
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
       api_key: os.environ/NVIDIA_API_KEY_1
+    rpm: 40
+    tpm: 100000
     model_info:
       input_cost_per_token: 0.0000005
       output_cost_per_token: 0.0000022
 
+  # ===== claude-opus-4-8 -> Nemotron Ultra 253B (NVIDIA NIM, 40 RPM) — peer model =====
   - model_name: claude-opus-4-8
     litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
-      api_key: os.environ/NVIDIA_API_KEY_2
+      model: nvidia_nim/nvidia/llama-3.1-nemotron-ultra-253b-v1
+      api_key: os.environ/NVIDIA_API_KEY_1
+    rpm: 40
+    tpm: 100000
     model_info:
-      input_cost_per_token: 0.0000005
-      output_cost_per_token: 0.0000022
+      input_cost_per_token: 0.000001
+      output_cost_per_token: 0.000001
 
+  # ===== claude-sonnet-5 -> OpenCode Zen (mimo-v2.5-free) =====
   - model_name: claude-sonnet-5
     litellm_params:
       model: openai/mimo-v2.5-free
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
+    rpm: 40
+    tpm: 100000
     model_info:
       input_cost_per_token: 0.000002
       output_cost_per_token: 0.000010
 
+  # ===== claude-sonnet-5 -> OpenCode Zen (hy3-free) =====
   - model_name: claude-sonnet-5
     litellm_params:
       model: openai/hy3-free
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
+    rpm: 40
+    tpm: 100000
     model_info:
       input_cost_per_token: 0.000002
       output_cost_per_token: 0.000010
 
+  # ===== claude-haiku-4-5-20251001 -> GPT-OSS-120b (NVIDIA NIM, 40 RPM) =====
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
       model: nvidia_nim/openai/gpt-oss-120b
       api_key: os.environ/NVIDIA_API_KEY_1
+    rpm: 40
+    tpm: 100000
     model_info:
       input_cost_per_token: 0.00000015
       output_cost_per_token: 0.0000006
 
-  - model_name: claude-haiku-4-5-20251001
-    litellm_params:
-      model: nvidia_nim/openai/gpt-oss-120b
-      api_key: os.environ/NVIDIA_API_KEY_2
-    model_info:
-      input_cost_per_token: 0.00000015
-      output_cost_per_token: 0.0000006
-
+  # ===== agnes-2.0-flash -> Agnes AI (20 RPM free tier) =====
   - model_name: agnes-2.0-flash
     litellm_params:
       model: openai/agnes-2.0-flash
       api_base: https://apihub.agnes-ai.com/v1
       api_key: os.environ/AGNES_API_KEY
+    rpm: 20
+    tpm: 100000
     model_info:
       input_cost_per_token: 0.000001
       output_cost_per_token: 0.000004
@@ -75,10 +85,6 @@ litellm_settings:
   calculate_costs_for_streaming: true
   log_costs: true
   log_usage: true
-general_settings:
-  master_key: os.environ/LITELLM_MASTER_KEY
-  database_url: os.environ/DATABASE_URL
-  store_model_in_db: true
 
 router_settings:
   routing_strategy: simple-shuffle
@@ -87,18 +93,17 @@ router_settings:
   allowed_fails: 2
   cooldown_time: 30
   enable_pre_call_checks: true
+  optional_pre_call_checks:
+    - enforce_model_rate_limits
   redis_host: os.environ/REDIS_HOST
   redis_port: os.environ/REDIS_PORT
   redis_password: os.environ/REDIS_PASSWORD
-  cost_tracking_enabled: true
-  cost_per_token:
-    input_cost_per_token: 0.000001
-    output_cost_per_token: 0.000004
   fallbacks:
     - claude-opus-4-8: ["claude-sonnet-5"]
     - claude-sonnet-5: ["claude-haiku-4-5-20251001"]
     - claude-haiku-4-5-20251001: ["agnes-2.0-flash"]
-  context_window_fallbacks:
-    - claude-opus-4-8: ["claude-sonnet-5"]
-    - claude-sonnet-5: ["claude-haiku-4-5-20251001"]
-    - claude-haiku-4-5-20251001: ["agnes-2.0-flash"]
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+  store_model_in_db: true
