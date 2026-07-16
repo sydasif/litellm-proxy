@@ -4,34 +4,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen) with load balancing, rate limiting, and fallback chains. Uses Docker Compose to deploy a patched LiteLLM image that fixes Nemotron thinking-stream and empty-choices streaming bugs.
+AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, Agnes AI) with load balancing and rate limiting. Uses Docker Compose to deploy a patched LiteLLM image that fixes Nemotron thinking-stream and empty-choices streaming bugs.
 
 ## Architecture
 
 **Model aliasing:** Virtual model names (e.g., `claude-opus-4-8`) map to real provider models. Clients request the virtual name; LiteLLM load-balances across multiple backend deployments per virtual model.
 
-**Backend deployments:**
+**Backend deployments (per-deployment RPM: 40 / 30 split):**
 
-| Virtual Model               | Deployment 1 (OpenCode Zen, 30 RPM) | Deployment 2 (NVIDIA NIM, 40 RPM)                                                       |
-| --------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------- |
-| `claude-opus-4-8`           | `openai/mimo-v2.5-free`             | `nvidia/nemotron-3-ultra-550b-a55b` (key 1)                                             |
-| `claude-sonnet-5`           | `openai/hy3-free` (295B MoE)        | `nvidia/nemotron-4-340b-instruct` (key 2)                                               |
-| `claude-haiku-4-5-20251001` | —                                   | `nvidia/nemotron-3-nano-30b-a3b` (key 1) + `mistralai/mistral-7b-instruct-v0.3` (key 2) |
+| Virtual Model               | Deployment 1 (40 RPM)                                  | Deployment 2 (30 RPM)                              |
+| --------------------------- | ------------------------------------------------------ | -------------------------------------------------- |
+| `claude-opus-4-8`           | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (key 1) | `openai/nvidia/nemotron-3-ultra-550b-a55b` (key 2) |
+| `claude-sonnet-5`           | `openai/hy3-free` (OpenCode Zen)                       | `openai/mimo-v2.5-free` (OpenCode Zen)             |
+| `claude-haiku-4-5-20251001` | `nvidia_nim/openai/gpt-oss-120b` (key 1)               | `openai/openai/gpt-oss-120b` (key 2)               |
+| `agnes-2.0-flash`           | `openai/agnes-2.0-flash` (Agnes AI, 30 RPM)            | —                                                  |
 
 **Rate limits (enforced via `enforce_model_rate_limits`):**
 
-| Provider     | RPM | TPM     | Scope                      |
-| ------------ | --- | ------- | -------------------------- |
-| NVIDIA NIM   | 40  | 500,000 | Per API key (published)    |
-| OpenCode Zen | 30  | 100,000 | Per API key (conservative) |
-
-**Fallback chain:**
-
-```
-claude-opus-4-8 → claude-sonnet-5 → claude-haiku-4-5-20251001
-```
+| Provider     | RPM | TPM     | Scope                |
+| ------------ | --- | ------- | -------------------- |
+| NVIDIA NIM   | 40  | 500,000 | Deploy 1 per API key |
+| OpenCode Zen | 30  | 100,000 | Per API key          |
+| Agnes AI     | 30  | 100,000 | Per API key          |
 
 **NVIDIA NIM worker limits:** 32 concurrent requests per worker. Different models = different worker pools = independent limits. Using multiple API keys across different models doubles effective throughput.
+
+**Note:** Fallback chain (`opus → sonnet → haiku`) was removed from `router_settings`. Only `simple-shuffle` load balancing across deployments remains.
 
 ## Patched Image (Nemotron thinking-stream + empty-choices fix)
 
@@ -90,15 +88,14 @@ python -c "import yaml; yaml.safe_load(open('litellm/config.yaml'))"
 | Setting                                           | Value                       | Description                                                                 |
 | ------------------------------------------------- | --------------------------- | --------------------------------------------------------------------------- |
 | `routing_strategy`                                | `simple-shuffle`            | Randomly distributes requests across deployments with RPM-aware weighting   |
-| `num_retries`                                     | `2`                         | Retry each deployment 2x before fallback                                    |
-| `timeout`                                         | `90`                        | Request timeout in seconds                                                  |
-| `allowed_fails`                                   | `2`                         | Mark deployment unhealthy after 2 consecutive failures                      |
-| `cooldown_time`                                   | `30`                        | Seconds before retrying failed deployment                                   |
+| `num_retries`                                     | `1`                         | Retry each deployment 1x before giving up                                   |
+| `timeout`                                         | `30`                        | Request timeout in seconds                                                  |
 | `enable_pre_call_checks`                          | `true`                      | Health checks before routing                                                |
 | `optional_pre_call_checks`                        | `enforce_model_rate_limits` | Hard-enforce RPM/TPM per deployment                                         |
 | `drop_params`                                     | `true`                      | Strips unsupported parameters for cross-provider compatibility              |
 | `use_chat_completions_url_for_anthropic_messages` | `true`                      | Routes all providers via `/v1/chat/completions` for Anthropic compatibility |
-| `fallbacks`                                       | `opus→sonnet→haiku`         | Automatic failover chain across model groups                                |
+| `reasoning_auto_summary`                          | `true`                      | Auto-summarizes extended reasoning streams                                  |
+| `cache`                                           | `true` (Redis)              | Caches repeated prompts via Redis for latency/cost savings                  |
 
 ## Testing
 

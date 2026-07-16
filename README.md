@@ -14,21 +14,22 @@
   <a href="https://docs.docker.com/compose/"><img src="https://img.shields.io/badge/docker%20compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Compose"></a>
 </p>
 
-A proxy gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers with load balancing, rate limiting, and fallback chains.
+A proxy gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, Agnes AI) with load balancing and rate limiting.
 
 ## Features
 
 - **Multi-provider routing**: Access NVIDIA NIM and OpenCode Zen through a single endpoint
 - **Load balancing**: `simple-shuffle` distributes requests across multiple model deployments per virtual model
 - **Rate limiting**: Per-deployment RPM/TPM enforcement via `enforce_model_rate_limits`
-- **Automatic fallbacks**: `opus → sonnet → haiku` chain across providers
+- **Load balancing**: `simple-shuffle` distributes requests across multiple model deployments per virtual model
+- **Rate limiting**: Per-deployment RPM/TPM enforcement via `enforce_model_rate_limits` (all deployments at 30 RPM)
 - **Parameter normalization**: Drops unsupported parameters (`drop_params: true`) for cross-provider compatibility
 - **Anthropic compatibility**: Routes all providers via `/v1/chat/completions` for Claude Code integration
 - **Dockerized**: Builds a patched LiteLLM image (`litellm-proxy:patched`) with Nemotron streaming fixes
 - **Redis caching**: Caches repeated prompts for cost savings and latency reduction
 - **PostgreSQL backend**: Persistent storage for virtual keys, budgets, and spend logs
 - **Virtual keys**: Revocable API keys with budgets, rate limits, and model allowlists
-- **Cost tracking**: Per-model, per-key, per-user spend logging to PostgreSQL
+- **Reasoning auto-summary**: Auto-summarizes extended reasoning streams (`reasoning_auto_summary: true`)
 - **Health checks**: Liveness (`/health/liveliness`) and readiness (`/health/readiness`) endpoints
 
 ## Architecture
@@ -38,26 +39,21 @@ A proxy gateway that routes **Claude Code** through **LiteLLM** to multiple AI b
 Each virtual model maps to **multiple backend deployments** across different providers. LiteLLM's `simple-shuffle` router distributes requests, and `enforce_model_rate_limits` blocks requests before hitting provider limits.
 
 ```
-claude-opus-4-8 → 2 pools: OpenCode Zen (30 RPM) + NVIDIA NIM (40 RPM)
-claude-sonnet-5 → 2 pools: OpenCode Zen (30 RPM) + NVIDIA NIM (40 RPM)
-claude-haiku-4-5 → 2 pools: NVIDIA NIM key 1 (40 RPM) + NVIDIA NIM key 2 (40 RPM)
+claude-opus-4-8   → 2 deployments: NVIDIA NIM nemotron-3-ultra (key 1, 40 RPM) + openai nemotron-3-ultra (key 2, 30 RPM)
+claude-sonnet-5   → 2 deployments: OpenCode Zen hy3-free (40 RPM) + OpenCode Zen mimo-v2.5-free (30 RPM)
+claude-haiku-4-5  → 2 deployments: NVIDIA NIM gpt-oss-120b (key 1, 40 RPM) + openai gpt-oss-120b (key 2, 30 RPM)
+agnes-2.0-flash   → 1 deployment: Agnes AI agnes-2.0-flash (30 RPM)
 ```
 
-### Fallback Chain
+**Note:** The `opus → sonnet → haiku` fallback chain was removed. Routing is now load-balancing only (`simple-shuffle`) across the deployments listed above.
 
-```
-claude-opus-4-8 → claude-sonnet-5 → claude-haiku-4-5-20251001
-```
+### Rate Limits (per-deployment RPM: 40 / 30 split)
 
-When a model group fails after `num_retries`, LiteLLM automatically tries the next model in the chain.
-
-### Rate Limits (Documented Free Tiers)
-
-| Provider     | RPM | TPM     | Scope                      |
-| ------------ | --- | ------- | -------------------------- |
-| NVIDIA NIM   | 40  | 500,000 | Per API key (published)    |
-| OpenCode Zen | 30  | 100,000 | Per API key (conservative) |
-| Agnes AI     | 20  | 100,000 | Per API key (published)    |
+| Provider     | RPM | TPM     | Scope                |
+| ------------ | --- | ------- | -------------------- |
+| NVIDIA NIM   | 40  | 500,000 | Deploy 1 per API key |
+| OpenCode Zen | 30  | 100,000 | Per API key          |
+| Agnes AI     | 30  | 100,000 | Per API key          |
 
 Different NVIDIA models = different worker pools = independent limits. Using both API keys across different models = 2x throughput.
 
@@ -151,36 +147,38 @@ Add to your shell profile (`~/.bashrc`, `~/.zshrc`, `~/.profile`) and restart yo
 
 ### Model Routing (`litellm/config.yaml`)
 
-| Model Alias                 | Deployment 1 (OpenCode Zen, 30 RPM) | Deployment 2 (NVIDIA NIM, 40 RPM)                                                       |
-| --------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------- |
-| `claude-opus-4-8`           | `openai/mimo-v2.5-free`             | `nvidia/nemotron-3-ultra-550b-a55b` (key 1)                                             |
-| `claude-sonnet-5`           | `openai/hy3-free` (295B MoE)        | `nvidia/nemotron-4-340b-instruct` (key 2)                                               |
-| `claude-haiku-4-5-20251001` | —                                   | `nvidia/nemotron-3-nano-30b-a3b` (key 1) + `mistralai/mistral-7b-instruct-v0.3` (key 2) |
-| `agnes-2.0-flash`           | —                                   | Agnes AI (20 RPM)                                                                       |
+| Model Alias                 | Deployment 1 (30 RPM)                                  | Deployment 2 (30 RPM)                              |
+| --------------------------- | ------------------------------------------------------ | -------------------------------------------------- |
+| `claude-opus-4-8`           | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (key 1) | `openai/nvidia/nemotron-3-ultra-550b-a55b` (key 2) |
+| `claude-sonnet-5`           | `openai/hy3-free` (OpenCode Zen)                       | `openai/mimo-v2.5-free` (OpenCode Zen)             |
+| `claude-haiku-4-5-20251001` | `nvidia_nim/openai/gpt-oss-120b` (key 1)               | `openai/openai/gpt-oss-120b` (key 2)               |
+| `agnes-2.0-flash`           | `openai/agnes-2.0-flash` (Agnes AI)                    | —                                                  |
 
 **Rate Limits** (enforced via `enforce_model_rate_limits`):
 
-| Provider     | Models                                                    | RPM | TPM     |
-| ------------ | --------------------------------------------------------- | --- | ------- |
-| NVIDIA NIM   | nemotron-3-ultra, nemotron-4, nemotron-3-nano, mistral-7b | 40  | 100,000 |
-| OpenCode Zen | mimo-v2.5-free, hy3-free                                  | 30  | 100,000 |
+| Provider     | Models                         | RPM | TPM     |
+| ------------ | ------------------------------ | --- | ------- |
+| NVIDIA NIM   | nemotron-3-ultra, gpt-oss-120b | 40  | 500,000 |
+| OpenCode Zen | mimo-v2.5-free, hy3-free       | 30  | 100,000 |
+| Agnes AI     | agnes-2.0-flash                | 30  | 100,000 |
 
 **Router Settings** (`router_settings`):
 
 - `routing_strategy: simple-shuffle` — random pick across deployments with RPM-aware weighting
-- `num_retries: 2` — retry failed requests up to 2 times before fallback
-- `timeout: 90` — request timeout in seconds
-- `allowed_fails: 2` — mark deployment unhealthy after 2 failures
-- `cooldown_time: 30` — seconds before retrying failed deployment
+- `num_retries: 1` — retry failed requests once
+- `timeout: 30` — request timeout in seconds
 - `enable_pre_call_checks: true` — health check before routing
 - `optional_pre_call_checks: [enforce_model_rate_limits]` — hard-enforce RPM/TPM
 - `redis_host/port/password` — Redis for cross-worker rate limiting
 
-**Fallbacks** (`router_settings.fallbacks`):
+**LiteLLM Settings** (`litellm_settings`):
 
-```
-claude-opus-4-8 → claude-sonnet-5 → claude-haiku-4-5-20251001
-```
+- `drop_params: true` — strips unsupported parameters for cross-provider compatibility
+- `use_chat_completions_url_for_anthropic_messages: true` — routes all providers via `/v1/chat/completions`
+- `reasoning_auto_summary: true` — auto-summarizes extended reasoning streams
+- `cache: true` — Redis-backed response caching for cost/latency savings
+
+**Fallbacks:** Removed. No model-group fallback chain is configured; routing is load-balancing only.
 
 ## Usage
 
@@ -252,12 +250,12 @@ Features:
 
 ### Available Models
 
-| Alias                       | Backend                                                |
-| --------------------------- | ------------------------------------------------------ |
-| `claude-opus-4-8`           | NVIDIA Nemotron 3 Ultra 550B / OpenCode mimo-v2.5-free |
-| `claude-sonnet-5`           | NVIDIA Nemotron 4 340B / OpenCode hy3-free             |
-| `claude-haiku-4-5-20251001` | NVIDIA Nemotron 3 Nano 30B + Mistral 7B                |
-| `agnes-2.0-flash`           | Agnes 2.0 Flash                                        |
+| Alias                       | Backend                                                                |
+| --------------------------- | ---------------------------------------------------------------------- |
+| `claude-opus-4-8`           | NVIDIA Nemotron 3 Ultra 550B (key 1) / NVIDIA Nemotron 3 Ultra (key 2) |
+| `claude-sonnet-5`           | OpenCode Zen hy3-free / OpenCode Zen mimo-v2.5-free                    |
+| `claude-haiku-4-5-20251001` | NVIDIA NIM gpt-oss-120b (key 1) / NVIDIA gpt-oss-120b (key 2)          |
+| `agnes-2.0-flash`           | Agnes 2.0 Flash                                                        |
 
 ## Project Structure
 

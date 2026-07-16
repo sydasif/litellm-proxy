@@ -13,7 +13,7 @@ model_list:
       model: openai/nvidia/nemotron-3-ultra-550b-a55b
       api_base: https://integrate.api.nvidia.com/v1
       api_key: os.environ/NVIDIA_API_KEY_2
-    rpm: 40
+    rpm: 30
     model_info:
       input_cost_per_token: 0.0000005
       output_cost_per_token: 0.0000022
@@ -33,7 +33,7 @@ model_list:
       model: openai/mimo-v2.5-free
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
-    rpm: 40
+    rpm: 30
     model_info:
       input_cost_per_token: 0.000002
       output_cost_per_token: 0.000010
@@ -52,7 +52,7 @@ model_list:
       model: openai/openai/gpt-oss-120b
       api_base: https://integrate.api.nvidia.com/v1
       api_key: os.environ/NVIDIA_API_KEY_2
-    rpm: 40
+    rpm: 30
     model_info:
       input_cost_per_token: 0.0000001
       output_cost_per_token: 0.0000004
@@ -62,6 +62,7 @@ model_list:
       model: openai/agnes-2.0-flash
       api_base: https://apihub.agnes-ai.com/v1
       api_key: os.environ/AGNES_API_KEY
+    rpm: 30
     model_info:
       input_cost_per_token: 0.000001
       output_cost_per_token: 0.000004
@@ -76,31 +77,18 @@ litellm_settings:
     host: os.environ/REDIS_HOST
     port: os.environ/REDIS_PORT
     password: os.environ/REDIS_PASSWORD
-  track_costs: true
-  track_costs_by_model: true
-  track_costs_by_key: true
-  track_costs_by_user: true
-  calculate_costs_for_streaming: true
-  log_costs: true
-  log_usage: true
 
 router_settings:
   routing_strategy: simple-shuffle
-  num_retries: 2
-  timeout: 90
-  allowed_fails: 2
-  cooldown_time: 30
+  num_retries: 1
+  timeout: 30
   enable_pre_call_checks: true
   optional_pre_call_checks:
     - enforce_model_rate_limits
   redis_host: os.environ/REDIS_HOST
   redis_port: os.environ/REDIS_PORT
   redis_password: os.environ/REDIS_PASSWORD
-  fallbacks:
-    - claude-opus-4-8: ["claude-sonnet-5"]
-    - claude-sonnet-5: ["claude-haiku-4-5-20251001"]
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
   database_url: os.environ/DATABASE_URL
-  store_model_in_db: true
