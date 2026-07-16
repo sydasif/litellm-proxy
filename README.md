@@ -35,7 +35,7 @@ A proxy gateway that routes **Claude Code** through **LiteLLM** to multiple AI b
 
 ### Model Routing
 
-Each virtual model (`claude-opus-4-8`, `claude-sonnet-5`, etc.) maps to **multiple backend deployments** across different providers. LiteLLM's `simple-shuffle` router distributes requests, and `enforce_model_rate_limits` blocks requests before hitting provider limits.
+Each virtual model maps to **multiple backend deployments** across different providers. LiteLLM's `simple-shuffle` router distributes requests, and `enforce_model_rate_limits` blocks requests before hitting provider limits.
 
 ```
 claude-opus-4-8 → 2 pools: OpenCode Zen (30 RPM) + NVIDIA NIM (40 RPM)
@@ -53,11 +53,13 @@ When a model group fails after `num_retries`, LiteLLM automatically tries the ne
 
 ### Rate Limits (Documented Free Tiers)
 
-| Provider     | RPM | TPM           | Scope                      |
-| ------------ | --- | ------------- | -------------------------- |
-| NVIDIA NIM   | 40  | 500,000       | Per API key                |
-| OpenCode Zen | 30  | Not published | Per API key (conservative) |
-| Agnes AI     | 20  | Not published | Per API key                |
+| Provider     | RPM | TPM     | Scope                      |
+| ------------ | --- | ------- | -------------------------- |
+| NVIDIA NIM   | 40  | 500,000 | Per API key (published)    |
+| OpenCode Zen | 30  | 100,000 | Per API key (conservative) |
+| Agnes AI     | 20  | 100,000 | Per API key (published)    |
+
+Different NVIDIA models = different worker pools = independent limits. Using both API keys across different models = 2x throughput.
 
 ### NVIDIA NIM Worker Limits
 
@@ -149,19 +151,19 @@ Add to your shell profile (`~/.bashrc`, `~/.zshrc`, `~/.profile`) and restart yo
 
 ### Model Routing (`litellm/config.yaml`)
 
-| Model Alias                 | Deployment 1 (OpenCode Zen, 30 RPM) | Deployment 2 (NVIDIA NIM, 40 RPM)                        |
-| --------------------------- | ----------------------------------- | -------------------------------------------------------- |
-| `claude-opus-4-8`           | `mimo-v2.5-free`                    | `nemotron-3-ultra-550b-a55b` (key 1)                     |
-| `claude-sonnet-5`           | `hy3-free` (295B MoE)               | `nemotron-4-340b-instruct` (key 2)                       |
-| `claude-haiku-4-5-20251001` | —                                   | `nemotron-3-nano-30b-a3b` (key 1) + `mistral-7b` (key 2) |
+| Model Alias                 | Deployment 1 (OpenCode Zen, 30 RPM) | Deployment 2 (NVIDIA NIM, 40 RPM)                                                       |
+| --------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------- |
+| `claude-opus-4-8`           | `openai/mimo-v2.5-free`             | `nvidia/nemotron-3-ultra-550b-a55b` (key 1)                                             |
+| `claude-sonnet-5`           | `openai/hy3-free` (295B MoE)        | `nvidia/nemotron-4-340b-instruct` (key 2)                                               |
+| `claude-haiku-4-5-20251001` | —                                   | `nvidia/nemotron-3-nano-30b-a3b` (key 1) + `mistralai/mistral-7b-instruct-v0.3` (key 2) |
+| `agnes-2.0-flash`           | —                                   | Agnes AI (20 RPM)                                                                       |
 
 **Rate Limits** (enforced via `enforce_model_rate_limits`):
 
-| Provider     | Models                        | RPM | TPM     |
-| ------------ | ----------------------------- | --- | ------- |
-| NVIDIA NIM   | nemotron-3-ultra, nemotron-4, | 40  | 100,000 |
-|              | nemotron-3-nano, mistral-7b   |     |         |
-| OpenCode Zen | mimo-v2.5-free, hy3-free      | 30  | 100,000 |
+| Provider     | Models                                                    | RPM | TPM     |
+| ------------ | --------------------------------------------------------- | --- | ------- |
+| NVIDIA NIM   | nemotron-3-ultra, nemotron-4, nemotron-3-nano, mistral-7b | 40  | 100,000 |
+| OpenCode Zen | mimo-v2.5-free, hy3-free                                  | 30  | 100,000 |
 
 **Router Settings** (`router_settings`):
 
@@ -171,22 +173,25 @@ Add to your shell profile (`~/.bashrc`, `~/.zshrc`, `~/.profile`) and restart yo
 - `allowed_fails: 2` — mark deployment unhealthy after 2 failures
 - `cooldown_time: 30` — seconds before retrying failed deployment
 - `enable_pre_call_checks: true` — health check before routing
-- `optional_pre_call_checks: [enforce_model_rate_limits]` — hard-enforce RPM/TPM per deployment
+- `optional_pre_call_checks: [enforce_model_rate_limits]` — hard-enforce RPM/TPM
 - `redis_host/port/password` — Redis for cross-worker rate limiting
 
 **Fallbacks** (`router_settings.fallbacks`):
 
-- `claude-opus-4-8` → `claude-sonnet-5`
-- `claude-sonnet-5` → `claude-haiku-4-5-20251001`
-
-**LiteLLM Settings** (`litellm_settings`):
-
-- `drop_params: true` — drop unsupported parameters for cross-provider compatibility
-- `use_chat_completions_url_for_anthropic_messages: true` — route via `/v1/chat/completions`
-- `cache: true` + `cache_params.type: redis` — Redis response caching
-- `track_costs: true` / `track_costs_by_model: true` — cost tracking to PostgreSQL
+```
+claude-opus-4-8 → claude-sonnet-5 → claude-haiku-4-5-20251001
+```
 
 ## Usage
+
+### Configure Claude Code
+
+```bash
+export ANTHROPIC_AUTH_TOKEN=$VKEY
+export ANTHROPIC_BASE_URL=http://localhost:4000
+```
+
+Add to your shell profile (`~/.bashrc`, `~/.zshrc`, `~/.profile`) and restart your terminal.
 
 ### Test the Proxy
 
@@ -198,11 +203,7 @@ curl -H "Authorization: Bearer <YOUR_VIRTUAL_KEY>" http://localhost:4000/v1/mode
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer <YOUR_VIRTUAL_KEY>" \
   -H "Content-Type: application/json" \
-  -d '{
-    "model": "claude-opus-4-8",
-    "messages": [{"role": "user", "content": "Hello!"}],
-    "max_tokens": 100
-  }'
+  -d '{"model": "claude-opus-4-8", "messages": [{"role": "user", "content": "Hello!"}], "max_tokens": 100}'
 ```
 
 ### Virtual Key Management
@@ -221,12 +222,10 @@ curl -X POST http://localhost:4000/key/generate \
   }'
 
 # Check key info
-curl -H "Authorization: Bearer <MASTER_KEY>" \
-  "http://localhost:4000/key/info?key=<VIRTUAL_KEY>"
+curl -H "Authorization: Bearer <MASTER_KEY>" "http://localhost:4000/key/info?key=<VIRTUAL_KEY>"
 
 # List all keys
-curl -H "Authorization: Bearer <MASTER_KEY>" \
-  http://localhost:4000/key/list
+curl -H "Authorization: Bearer <MASTER_KEY>" http://localhost:4000/key/list
 
 # Revoke a key
 curl -X POST http://localhost:4000/key/delete \
@@ -235,8 +234,7 @@ curl -X POST http://localhost:4000/key/delete \
   -d '{"key": "<VIRTUAL_KEY>"}'
 
 # Spend report
-curl -H "Authorization: Bearer <MASTER_KEY>" \
-  "http://localhost:4000/global/spend/report"
+curl -H "Authorization: Bearer <MASTER_KEY>" "http://localhost:4000/global/spend/report"
 ```
 
 ### Admin UI
@@ -256,9 +254,10 @@ Features:
 
 | Alias                       | Backend                                                |
 | --------------------------- | ------------------------------------------------------ |
-| `claude-opus-4-8`           | NVIDIA Nemotron 3 Ultra 550B + OpenCode mimo-v2.5-free |
-| `claude-sonnet-5`           | NVIDIA Nemotron 4 340B + OpenCode hy3-free             |
+| `claude-opus-4-8`           | NVIDIA Nemotron 3 Ultra 550B / OpenCode mimo-v2.5-free |
+| `claude-sonnet-5`           | NVIDIA Nemotron 4 340B / OpenCode hy3-free             |
 | `claude-haiku-4-5-20251001` | NVIDIA Nemotron 3 Nano 30B + Mistral 7B                |
+| `agnes-2.0-flash`           | Agnes 2.0 Flash                                        |
 
 ## Project Structure
 
@@ -267,8 +266,7 @@ litellm-proxy/
 ├── docker-compose.yml          # Docker Compose (LiteLLM + Postgres + Redis)
 ├── Dockerfile                  # Builds litellm-proxy:patched from official image
 ├── patches/
-│   ├── fix_nemotron_thinking_stream.py  # Patches LiteLLM SSE streaming bugs
-│   └── fix_empty_choices.py            # Empty-choices streaming guard
+│   └── fix_nemotron_thinking_stream.py  # Patches LiteLLM SSE streaming bug
 ├── .env                        # API keys (gitignored)
 ├── .env.example                # Template for environment variables
 ├── .gitignore
@@ -298,6 +296,7 @@ litellm-proxy/
 | View logs                    | `docker compose logs -f`                                          |
 | Check container status       | `docker compose ps`                                               |
 | Admin UI                     | `http://localhost:4000/ui`                                        |
+| Generate virtual key         | `curl -X POST ... /key/generate`                                  |
 | Health check (liveness)      | `curl http://localhost:4000/health/liveliness`                    |
 | Health check (readiness)     | `curl http://localhost:4000/health/readiness`                     |
 
