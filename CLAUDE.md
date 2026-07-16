@@ -85,17 +85,11 @@ python -c "import yaml; yaml.safe_load(open('litellm/config.yaml'))"
 
 ## Router Configuration (`litellm/config.yaml`)
 
-| Setting                                           | Value                       | Description                                                                 |
-| ------------------------------------------------- | --------------------------- | --------------------------------------------------------------------------- |
-| `routing_strategy`                                | `simple-shuffle`            | Randomly distributes requests across deployments with RPM-aware weighting   |
-| `num_retries`                                     | `1`                         | Retry each deployment 1x before giving up                                   |
-| `timeout`                                         | `30`                        | Request timeout in seconds                                                  |
-| `enable_pre_call_checks`                          | `true`                      | Health checks before routing                                                |
-| `optional_pre_call_checks`                        | `enforce_model_rate_limits` | Hard-enforce RPM/TPM per deployment                                         |
-| `drop_params`                                     | `true`                      | Strips unsupported parameters for cross-provider compatibility              |
-| `use_chat_completions_url_for_anthropic_messages` | `true`                      | Routes all providers via `/v1/chat/completions` for Anthropic compatibility |
-| `reasoning_auto_summary`                          | `true`                      | Auto-summarizes extended reasoning streams                                  |
-| `cache`                                           | `true` (Redis)              | Caches repeated prompts via Redis for latency/cost savings                  |
+Source of truth for routing and provider settings. Key behaviors:
+
+- `routing_strategy: simple-shuffle` — RPM-aware random distribution across deployments (no fallback chain)
+- `optional_pre_call_checks: [enforce_model_rate_limits]` — hard-enforces per-deployment RPM/TPM
+- `drop_params: true`, `use_chat_completions_url_for_anthropic_messages: true`, `reasoning_auto_summary: true`, `cache: true` (Redis)
 
 ## Testing
 
@@ -107,13 +101,9 @@ curl http://localhost:4000/v1/models
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
-  -d '{
-    "model": "claude-opus-4-8",
-    "messages": [{"role": "user", "content": "Hello!"}],
-    "max_tokens": 100
-  }'
+  -d '{"model": "claude-opus-4-8", "messages": [{"role": "user", "content": "Hello!"}], "max_tokens": 100}'
 
-# Check load balancing (should show different x-litellm-model-id headers)
+# Check load balancing (different x-litellm-model-id headers across requests)
 for i in {1..6}; do
   curl -s -D - http://localhost:4000/v1/chat/completions \
     -H "Content-Type: application/json" \

@@ -18,11 +18,9 @@ A proxy gateway that routes **Claude Code** through **LiteLLM** to multiple AI b
 
 ## Features
 
-- **Multi-provider routing**: Access NVIDIA NIM and OpenCode Zen through a single endpoint
-- **Load balancing**: `simple-shuffle` distributes requests across multiple model deployments per virtual model
-- **Rate limiting**: Per-deployment RPM/TPM enforcement via `enforce_model_rate_limits`
-- **Load balancing**: `simple-shuffle` distributes requests across multiple model deployments per virtual model
-- **Rate limiting**: Per-deployment RPM/TPM enforcement via `enforce_model_rate_limits` (all deployments at 30 RPM)
+- **Multi-provider**: Access NVIDIA NIM and OpenCode Zen through a single endpoint
+- **Load balancing**: `simple-shuffle` distributes requests across multiple model deployments
+- **Rate limiting**: RPM/TPM enforcement via `enforce_model_rate_limits`
 - **Parameter normalization**: Drops unsupported parameters (`drop_params: true`) for cross-provider compatibility
 - **Anthropic compatibility**: Routes all providers via `/v1/chat/completions` for Claude Code integration
 - **Dockerized**: Builds a patched LiteLLM image (`litellm-proxy:patched`) with Nemotron streaming fixes
@@ -36,36 +34,18 @@ A proxy gateway that routes **Claude Code** through **LiteLLM** to multiple AI b
 
 ### Model Routing
 
-Each virtual model maps to **multiple backend deployments** across different providers. LiteLLM's `simple-shuffle` router distributes requests, and `enforce_model_rate_limits` blocks requests before hitting provider limits.
+Each claude model maps to **multiple backend deployments** across different providers. LiteLLM's `simple-shuffle` router distributes requests, and `enforce_model_rate_limits` blocks requests before hitting provider limits.
 
-```
+```bash
 claude-opus-4-8   → 2 deployments: NVIDIA NIM nemotron-3-ultra (key 1, 40 RPM) + openai nemotron-3-ultra (key 2, 30 RPM)
 claude-sonnet-5   → 2 deployments: OpenCode Zen hy3-free (40 RPM) + OpenCode Zen mimo-v2.5-free (30 RPM)
 claude-haiku-4-5  → 2 deployments: NVIDIA NIM gpt-oss-120b (key 1, 40 RPM) + openai gpt-oss-120b (key 2, 30 RPM)
 agnes-2.0-flash   → 1 deployment: Agnes AI agnes-2.0-flash (30 RPM)
 ```
 
-**Note:** The `opus → sonnet → haiku` fallback chain was removed. Routing is now load-balancing only (`simple-shuffle`) across the deployments listed above.
-
-### Rate Limits (per-deployment RPM: 40 / 30 split)
-
-| Provider     | RPM | TPM     | Scope                |
-| ------------ | --- | ------- | -------------------- |
-| NVIDIA NIM   | 40  | 500,000 | Deploy 1 per API key |
-| OpenCode Zen | 30  | 100,000 | Per API key          |
-| Agnes AI     | 30  | 100,000 | Per API key          |
-
-Different NVIDIA models = different worker pools = independent limits. Using both API keys across different models = 2x throughput.
-
-### NVIDIA NIM Worker Limits
-
-NVIDIA NIM enforces **32 concurrent requests per worker** (separate from RPM). The `ResourceExhausted: Worker local total request limit reached` error occurs when concurrent requests exceed this limit. Using different models on NIM provides **separate worker pools** (each model = own 32-slot pool).
-
 ## Prerequisites
 
-- [Docker Desktop](https://docs.docker.com/get-docker/) or Docker Engine
-- [Docker Compose](https://docs.docker.com/compose/install/)
-- API keys for the backends you plan to use (see `.env.example`)
+- [Docker](https://docs.docker.com/get-docker/)
 
 ## Quick Start
 
@@ -76,17 +56,11 @@ cd litellm-proxy
 cp .env.example .env
 
 # 2. Generate required keys and populate .env
+cat > .env <<EOF
 LITELLM_MASTER_KEY="sk-$(openssl rand -hex 24)"
 LITELLM_SALT_KEY="$(openssl rand -base64 32)"
 POSTGRES_PASSWORD="$(openssl rand -base64 16)"
 REDIS_PASSWORD="$(openssl rand -base64 16)"
-
-# Write to .env
-cat > .env <<EOF
-LITELLM_MASTER_KEY=$LITELLM_MASTER_KEY
-LITELLM_SALT_KEY=$LITELLM_SALT_KEY
-POSTGRES_PASSWORD=$POSTGRES_PASSWORD
-REDIS_PASSWORD=$REDIS_PASSWORD
 UI_USERNAME=admin
 UI_PASSWORD=changeme123
 EOF
@@ -94,27 +68,27 @@ EOF
 # 3. Add YOUR provider API keys to .env (edit the file)
 # Required: NVIDIA_API_KEY_1, NVIDIA_API_KEY_2, OPENCODE_API_KEY
 
-# 4. Start the proxy stack
+# 5. Start the proxy stack
 docker compose up -d
 
-# 5. Verify
+# 6. Verify
 curl http://localhost:4000/health/liveliness   # "I'm alive!"
 curl http://localhost:4000/health/readiness   # {"status":"healthy","db":"connected"}
 
-# 6. Create a virtual key (use for apps, NOT master key)
+# 7. Create a virtual key (use for apps, NOT master key)
 VKEY=$(curl -s -X POST http://localhost:4000/key/generate \
   -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"models": ["claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5-20251001"], "max_budget": 50, "budget_duration": "30d", "rpm_limit": 60}' | jq -r .key)
+  -d '{"models": ["claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5-20251001"], "max_budget": 50, "budget_duration": "30d", "rpm_limit": 30}' | jq -r .key)
 
-# 7. Test with virtual key
+# 8. Test with virtual key
 curl -H "Authorization: Bearer $VKEY" http://localhost:4000/v1/models
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer $VKEY" \
   -H "Content-Type: application/json" \
   -d '{"model": "claude-opus-4-8", "messages": [{"role": "user", "content": "Hello!"}], "max_tokens": 50}'
 
-# 8. Open Admin UI
+# 9. Open Admin UI
 # http://localhost:4000/ui  (user: admin, pass: changeme123)
 ```
 
@@ -125,81 +99,17 @@ export ANTHROPIC_AUTH_TOKEN=$VKEY
 export ANTHROPIC_BASE_URL=http://localhost:4000
 ```
 
-Add to your shell profile (`~/.bashrc`, `~/.zshrc`, `~/.profile`) and restart your terminal.
-
-## Configuration
-
-### Environment Variables (`.env`)
-
-| Variable             | Required | Description                                                                                            |
-| -------------------- | -------- | ------------------------------------------------------------------------------------------------------ |
-| `LITELLM_MASTER_KEY` | Yes      | Admin API key (must start with `sk-`). Generate: `openssl rand -hex 24                                 | sed 's/^/sk-/'` |
-| `LITELLM_SALT_KEY`   | Yes      | DB encryption key (base64). **Cannot be rotated after first use!** Generate: `openssl rand -base64 32` |
-| `POSTGRES_PASSWORD`  | Yes      | PostgreSQL password                                                                                    |
-| `REDIS_PASSWORD`     | Yes      | Redis password                                                                                         |
-| `UI_USERNAME`        | No       | Admin UI basic auth username (default: `admin`)                                                        |
-| `UI_PASSWORD`        | No       | Admin UI basic auth password                                                                           |
-| `NVIDIA_API_KEY_1`   | Yes*     | Primary NVIDIA NIM API key                                                                             |
-| `NVIDIA_API_KEY_2`   | Yes*     | Secondary NVIDIA NIM API key                                                                           |
-| `OPENCODE_API_KEY`   | Yes*     | OpenCode Zen API key                                                                                   |
-
-*At least one provider's keys required. Missing keys = those models return 401.
-
-### Model Routing (`litellm/config.yaml`)
-
-| Model Alias                 | Deployment 1 (30 RPM)                                  | Deployment 2 (30 RPM)                              |
-| --------------------------- | ------------------------------------------------------ | -------------------------------------------------- |
-| `claude-opus-4-8`           | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (key 1) | `openai/nvidia/nemotron-3-ultra-550b-a55b` (key 2) |
-| `claude-sonnet-5`           | `openai/hy3-free` (OpenCode Zen)                       | `openai/mimo-v2.5-free` (OpenCode Zen)             |
-| `claude-haiku-4-5-20251001` | `nvidia_nim/openai/gpt-oss-120b` (key 1)               | `openai/openai/gpt-oss-120b` (key 2)               |
-| `agnes-2.0-flash`           | `openai/agnes-2.0-flash` (Agnes AI)                    | —                                                  |
-
-**Rate Limits** (enforced via `enforce_model_rate_limits`):
-
-| Provider     | Models                         | RPM | TPM     |
-| ------------ | ------------------------------ | --- | ------- |
-| NVIDIA NIM   | nemotron-3-ultra, gpt-oss-120b | 40  | 500,000 |
-| OpenCode Zen | mimo-v2.5-free, hy3-free       | 30  | 100,000 |
-| Agnes AI     | agnes-2.0-flash                | 30  | 100,000 |
-
-**Router Settings** (`router_settings`):
-
-- `routing_strategy: simple-shuffle` — random pick across deployments with RPM-aware weighting
-- `num_retries: 1` — retry failed requests once
-- `timeout: 30` — request timeout in seconds
-- `enable_pre_call_checks: true` — health check before routing
-- `optional_pre_call_checks: [enforce_model_rate_limits]` — hard-enforce RPM/TPM
-- `redis_host/port/password` — Redis for cross-worker rate limiting
-
-**LiteLLM Settings** (`litellm_settings`):
-
-- `drop_params: true` — strips unsupported parameters for cross-provider compatibility
-- `use_chat_completions_url_for_anthropic_messages: true` — routes all providers via `/v1/chat/completions`
-- `reasoning_auto_summary: true` — auto-summarizes extended reasoning streams
-- `cache: true` — Redis-backed response caching for cost/latency savings
-
-**Fallbacks:** Removed. No model-group fallback chain is configured; routing is load-balancing only.
-
-## Usage
-
-### Configure Claude Code
-
-```bash
-export ANTHROPIC_AUTH_TOKEN=$VKEY
-export ANTHROPIC_BASE_URL=http://localhost:4000
-```
-
-Add to your shell profile (`~/.bashrc`, `~/.zshrc`, `~/.profile`) and restart your terminal.
+Add to your shell profile (`~/.bashrc`, `~/.zshrc`) or in claude code `settings.json` and restart your terminal.
 
 ### Test the Proxy
 
 ```bash
 # List available models (requires auth)
-curl -H "Authorization: Bearer <YOUR_VIRTUAL_KEY>" http://localhost:4000/v1/models
+curl -H "Authorization: Bearer <YOUR_KEY>" http://localhost:4000/v1/models
 
 # Chat completion
 curl -X POST http://localhost:4000/v1/chat/completions \
-  -H "Authorization: Bearer <YOUR_VIRTUAL_KEY>" \
+  -H "Authorization: Bearer <YOUR_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"model": "claude-opus-4-8", "messages": [{"role": "user", "content": "Hello!"}], "max_tokens": 100}'
 ```
@@ -215,7 +125,7 @@ curl -X POST http://localhost:4000/key/generate \
     "models": ["claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
     "max_budget": 50,
     "budget_duration": "30d",
-    "rpm_limit": 60,
+    "rpm_limit": 30,
     "metadata": {"team": "engineering", "owner": "user@example.com"}
   }'
 
@@ -259,7 +169,7 @@ Features:
 
 ## Project Structure
 
-```
+```bash
 litellm-proxy/
 ├── docker-compose.yml          # Docker Compose (LiteLLM + Postgres + Redis)
 ├── Dockerfile                  # Builds litellm-proxy:patched from official image
