@@ -319,4 +319,10 @@ Please ensure any changes maintain the security principle of keeping API keys in
 
 ## License
 
-MIT
+MIT License — Copyright (c) 2026 Syed Asif
+
+See [LICENSE](LICENSE) for full terms.
+
+This project is a **LiteLLM proxy configuration** that routes requests to external AI APIs. Users must provide their own API keys. No model weights, binaries, or proprietary code are distributed with this repository.
+
+LiteLLM (the base image) is licensed under MIT: [https://github.com/BerriAI/litellm](https://github.com/BerriAI/litellm)

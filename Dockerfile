@@ -1,3 +1,9 @@
+# MIT License - Copyright (c) 2026 Syed Asif
+# See LICENSE file for details.
+#
+# This Dockerfile builds a patched LiteLLM image for the AI Proxy Gateway.
+# LiteLLM base image is MIT-licensed (https://github.com/BerriAI/litellm).
+# No model weights or proprietary code are included in this build.
 FROM docker.litellm.ai/berriai/litellm-database:1.92.0
 
 # Pinned to a specific release for reproducible builds. Bump this tag together
