@@ -22,7 +22,22 @@ services:
       UI_PASSWORD: "${UI_PASSWORD}"
       STORE_MODEL_IN_DB: "true"
     command:
-      ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "4"]
+      [
+        "--config",
+        "/app/config.yaml",
+        "--port",
+        "4000",
+        "--num_workers",
+        "4",
+        "--run_gunicorn",
+        "--max_requests_before_restart",
+        "10000",
+        "--max_requests_before_restart_jitter",
+        "1000",
+      ]
+    cpus: 4.0
+    mem_limit: 4g
+    stop_grace_period: 1m
     restart: unless-stopped
     depends_on:
       db:
@@ -51,7 +66,8 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
+    mem_limit: 1g
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
       interval: 5s
@@ -67,18 +83,29 @@ services:
         "redis-server",
         "--requirepass",
         "${REDIS_PASSWORD}",
-        "--appendonly",
-        "yes",
+        "--save",
+        "900 1",
+        "--save",
+        "300 10",
+        "--maxmemory",
+        "256mb",
+        "--maxmemory-policy",
+        "allkeys-lru",
       ]
     volumes:
       - redis_data:/data
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
+    mem_limit: 512m
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
-      interval: 5s
+      test:
+        [
+          "CMD-SHELL",
+          'redis-cli -h localhost -a "$REDIS_PASSWORD" ping | grep -q PONG',
+        ]
+      interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 5
 
 volumes:
   postgres_data:

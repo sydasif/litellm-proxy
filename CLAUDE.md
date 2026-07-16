@@ -29,7 +29,7 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 
 **NVIDIA NIM worker limits:** 32 concurrent requests per worker. Different models = different worker pools = independent limits. Using multiple API keys across different models doubles effective throughput.
 
-**Note:** Fallback chain (`opus → sonnet → haiku`) was removed from `router_settings`. Only `simple-shuffle` load balancing across deployments remains.
+**Fallback safety net:** Each primary model falls back to `agnes-2.0-flash` if all its deployments are exhausted or rate-limited. `simple-shuffle` handles load balancing across deployments per model.
 
 ## Patched Image (Nemotron thinking-stream + empty-choices fix)
 
