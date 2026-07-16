@@ -34,27 +34,38 @@ model_list:
       input_cost_per_token: 0.000002
       output_cost_per_token: 0.000010
 
-  # ===== claude-sonnet-5 -> NVIDIA Nemotron 4 340B (340B MoE peer) =====
+  # ===== claude-sonnet-5 -> NVIDIA Nemotron 4 340B (340B MoE peer, key 2) =====
   - model_name: claude-sonnet-5
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-4-340b-instruct
-      api_key: os.environ/NVIDIA_API_KEY_1
+      api_key: os.environ/NVIDIA_API_KEY_2
     rpm: 40
     tpm: 100000
     model_info:
       input_cost_per_token: 0.000001
       output_cost_per_token: 0.000001
 
-  # ===== claude-haiku-4-5-20251001 -> NVIDIA GPT-OSS-120b =====
+  # ===== claude-haiku-4-5-20251001 -> NVIDIA Mistral 7B (key 2, fastest) =====
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
-      model: nvidia_nim/openai/gpt-oss-120b
+      model: nvidia_nim/mistralai/mistral-7b-instruct-v0.3
+      api_key: os.environ/NVIDIA_API_KEY_2
+    rpm: 40
+    tpm: 100000
+    model_info:
+      input_cost_per_token: 0.0000001
+      output_cost_per_token: 0.0000004
+
+  # ===== claude-haiku-4-5-20251001 -> NVIDIA Nemotron 3 Nano 30B (key 1, fast) =====
+  - model_name: claude-haiku-4-5-20251001
+    litellm_params:
+      model: nvidia_nim/nvidia/nemotron-3-nano-30b-a3b
       api_key: os.environ/NVIDIA_API_KEY_1
     rpm: 40
     tpm: 100000
     model_info:
-      input_cost_per_token: 0.00000015
-      output_cost_per_token: 0.0000006
+      input_cost_per_token: 0.0000001
+      output_cost_per_token: 0.0000004
 
   # ===== agnes-2.0-flash -> Agnes AI =====
   - model_name: agnes-2.0-flash
@@ -101,7 +112,6 @@ router_settings:
   fallbacks:
     - claude-opus-4-8: ["claude-sonnet-5"]
     - claude-sonnet-5: ["claude-haiku-4-5-20251001"]
-    - claude-haiku-4-5-20251001: ["agnes-2.0-flash"]
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
