@@ -13,7 +13,7 @@ model_list:
       model: openai/nvidia/nemotron-3-ultra-550b-a55b
       api_base: https://integrate.api.nvidia.com/v1
       api_key: os.environ/NVIDIA_API_KEY_2
-    rpm: 30
+    rpm: 40
     model_info:
       input_cost_per_token: 0.0000005
       output_cost_per_token: 0.0000022
@@ -33,7 +33,7 @@ model_list:
       model: openai/mimo-v2.5-free
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
-    rpm: 30
+    rpm: 40
     model_info:
       input_cost_per_token: 0.000002
       output_cost_per_token: 0.000010
@@ -52,7 +52,7 @@ model_list:
       model: openai/openai/gpt-oss-120b
       api_base: https://integrate.api.nvidia.com/v1
       api_key: os.environ/NVIDIA_API_KEY_2
-    rpm: 30
+    rpm: 40
     model_info:
       input_cost_per_token: 0.0000001
       output_cost_per_token: 0.0000004
