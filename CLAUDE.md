@@ -10,9 +10,9 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 
 **Model aliasing:** Virtual model names (e.g., `claude-opus-4-8`) map to real provider models. Clients request the virtual name; LiteLLM load-balances across multiple backend deployments per virtual model.
 
-**Backend deployments (per-deployment RPM: 40 / 30 split):**
+**Backend deployments (per-deployment RPM: 40 / 40 split):**
 
-| Virtual Model               | Deployment 1 (40 RPM)                                  | Deployment 2 (30 RPM)                              |
+| Virtual Model               | Deployment 1 (40 RPM)                                  | Deployment 2 (40 RPM)                              |
 | --------------------------- | ------------------------------------------------------ | -------------------------------------------------- |
 | `claude-opus-4-8`           | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (key 1) | `openai/nvidia/nemotron-3-ultra-550b-a55b` (key 2) |
 | `claude-sonnet-5`           | `openai/hy3-free` (OpenCode Zen)                       | `openai/mimo-v2.5-free` (OpenCode Zen)             |
@@ -21,11 +21,11 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 
 **Rate limits (enforced via `enforce_model_rate_limits`):**
 
-| Provider     | RPM | TPM     | Scope                |
-| ------------ | --- | ------- | -------------------- |
-| NVIDIA NIM   | 40  | 500,000 | Deploy 1 per API key |
-| OpenCode Zen | 30  | 100,000 | Per API key          |
-| Agnes AI     | 30  | 100,000 | Per API key          |
+| Provider     | RPM | TPM     | Scope                          |
+| ------------ | --- | ------- | ------------------------------ |
+| NVIDIA NIM   | 40  | 500,000 | Per API key (both deployments) |
+| OpenCode Zen | 40  | 100,000 | Per API key (both deployments) |
+| Agnes AI     | 30  | —       | Per API key                    |
 
 **NVIDIA NIM worker limits:** 32 concurrent requests per worker. Different models = different worker pools = independent limits. Using multiple API keys across different models doubles effective throughput.
 
