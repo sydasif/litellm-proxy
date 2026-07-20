@@ -50,7 +50,7 @@ services:
           "CMD-SHELL",
           'python3 -c "import urllib.request; urllib.request.urlopen(''http://localhost:4000/health/liveliness'')"',
         ]
-      interval: 30s
+      interval: 60s
       timeout: 10s
       retries: 3
       start_period: 40s
@@ -70,7 +70,7 @@ services:
     mem_limit: 1g
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
-      interval: 5s
+      interval: 15s
       timeout: 5s
       retries: 10
 
@@ -103,7 +103,7 @@ services:
           "CMD-SHELL",
           'redis-cli -h localhost -a "$REDIS_PASSWORD" ping | grep -q PONG',
         ]
-      interval: 10s
+      interval: 30s
       timeout: 5s
       retries: 5
 
