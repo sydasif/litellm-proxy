@@ -10,8 +10,7 @@ model_list:
 
   - model_name: claude-opus-4-8
     litellm_params:
-      model: openai/nvidia/nemotron-3-ultra-550b-a55b
-      api_base: https://integrate.api.nvidia.com/v1
+      model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
       api_key: os.environ/NVIDIA_API_KEY_2
     rpm: 40
     model_info:
@@ -49,8 +48,7 @@ model_list:
 
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
-      model: openai/openai/gpt-oss-120b
-      api_base: https://integrate.api.nvidia.com/v1
+      model: nvidia_nim/openai/gpt-oss-120b
       api_key: os.environ/NVIDIA_API_KEY_2
     rpm: 40
     model_info:
@@ -85,7 +83,6 @@ router_settings:
   routing_strategy: simple-shuffle
   num_retries: 1
   timeout: 60
-  enable_pre_call_checks: true
   optional_pre_call_checks:
     - enforce_model_rate_limits
   fallbacks:
