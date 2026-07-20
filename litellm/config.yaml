@@ -3,7 +3,7 @@ model_list:
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
       api_key: os.environ/NVIDIA_API_KEY_1
-    rpm: 40
+    rpm: 30
     model_info:
       input_cost_per_token: 0.0000005
       output_cost_per_token: 0.0000022
@@ -12,7 +12,7 @@ model_list:
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
       api_key: os.environ/NVIDIA_API_KEY_2
-    rpm: 40
+    rpm: 30
     model_info:
       input_cost_per_token: 0.0000005
       output_cost_per_token: 0.0000022
@@ -22,7 +22,7 @@ model_list:
       model: openai/hy3-free
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
-    rpm: 40
+    rpm: 30
     model_info:
       input_cost_per_token: 0.000002
       output_cost_per_token: 0.000010
@@ -32,7 +32,7 @@ model_list:
       model: openai/mimo-v2.5-free
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
-    rpm: 40
+    rpm: 30
     model_info:
       input_cost_per_token: 0.000002
       output_cost_per_token: 0.000010
@@ -41,7 +41,7 @@ model_list:
     litellm_params:
       model: nvidia_nim/openai/gpt-oss-120b
       api_key: os.environ/NVIDIA_API_KEY_1
-    rpm: 40
+    rpm: 30
     model_info:
       input_cost_per_token: 0.0000001
       output_cost_per_token: 0.0000004
@@ -50,7 +50,7 @@ model_list:
     litellm_params:
       model: nvidia_nim/openai/gpt-oss-120b
       api_key: os.environ/NVIDIA_API_KEY_2
-    rpm: 40
+    rpm: 30
     model_info:
       input_cost_per_token: 0.0000001
       output_cost_per_token: 0.0000004
@@ -62,8 +62,8 @@ model_list:
       api_key: os.environ/AGNES_API_KEY
     rpm: 30
     model_info:
-      input_cost_per_token: 0.000001
-      output_cost_per_token: 0.000004
+      input_cost_per_token: 0.000002
+      output_cost_per_token: 0.000010
 
 litellm_settings:
   drop_params: true
@@ -80,9 +80,6 @@ litellm_settings:
     ttl: 600
 
 router_settings:
-  routing_strategy: simple-shuffle
-  num_retries: 1
-  timeout: 60
   optional_pre_call_checks:
     - enforce_model_rate_limits
   fallbacks:
@@ -96,6 +93,3 @@ router_settings:
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
   database_url: os.environ/DATABASE_URL
-  database_connection_pool_limit: 10
-  database_connect_timeout: 60
-  database_socket_timeout: 60
