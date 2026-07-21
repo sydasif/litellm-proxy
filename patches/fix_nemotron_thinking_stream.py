@@ -252,24 +252,6 @@ def _patch_streaming(path: str) -> bool:
     print(f"PATCHED streaming_iterator.py: added thinking_delta/text-block guard in {count} transition path(s)")
     return True
 
-
-def main() -> int:
-    ok = True
-    if os.path.exists(TRANSFORM_FILE):
-        ok = _patch_transformation(TRANSFORM_FILE) and ok
-    else:
-        print(f"ERROR: {TRANSFORM_FILE} not found")
-        ok = False
-
-    if os.path.exists(STREAMING_FILE):
-        ok = _patch_streaming(STREAMING_FILE) and ok
-    else:
-        print(f"ERROR: {STREAMING_FILE} not found")
-        ok = False
-
-    return 0 if ok else 1
-
-
 def _patch_streaming_empty_choices(path: str) -> bool:
     """Patch streaming_iterator.py to handle empty choices in chunk."""
     with io.open(path, "r", encoding="utf-8") as fh:

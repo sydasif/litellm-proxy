@@ -15,7 +15,7 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 | Virtual Model               | Deployment 1                                   | Deployment 2                               |
 | --------------------------- | ---------------------------------------------- | ------------------------------------------ |
 | `claude-opus-4-8`           | `nvidia_nim/…nemotron-3…` (key 1, 30 RPM)      | `nvidia_nim/…nemotron-3…` (key 2, 30 RPM)  |
-| `claude-sonnet-5`           | `openai/hy3-free` (OpenCode Zen)               | —                                          |
+| `claude-sonnet-5`           | `openai/mimo-v2.5-free` (OpenCode Zen)         | —                                          |
 | `claude-haiku-4-5-20251001` | `nvidia_nim/…gpt-oss-120b` (key 1, 30 RPM)     | `nvidia_nim/…gpt-oss-120b` (key 2, 30 RPM) |
 | `agnes-2.0-flash`           | `openai/agnes-2.0-flash` (Agnes AI)            | —                                          |
 | `deepseek-v4-flash`         | `openai/deepseek-v4-flash-free` (OpenCode Zen) | —                                          |

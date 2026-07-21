@@ -37,10 +37,11 @@ A proxy gateway that routes **Claude Code** through **LiteLLM** to multiple AI b
 Each claude model maps to **multiple backend deployments** across different providers. LiteLLM's `simple-shuffle` router distributes requests, and `enforce_model_rate_limits` blocks requests before hitting provider limits.
 
 ```bash
-claude-opus-4-8   → 2 deployments: NVIDIA NIM nemotron-3-ultra (key 1, 40 RPM) + openai nemotron-3-ultra (key 2, 40 RPM)
-claude-sonnet-5   → 2 deployments: OpenCode Zen hy3-free (40 RPM) + OpenCode Zen mimo-v2.5-free (40 RPM)
-claude-haiku-4-5  → 2 deployments: NVIDIA NIM gpt-oss-120b (key 1, 40 RPM) + openai gpt-oss-120b (key 2, 40 RPM)
-agnes-2.0-flash   → 1 deployment: Agnes AI agnes-2.0-flash (30 RPM)
+claude-opus-4-8   → 2 deployments: NVIDIA NIM nemotron-3-ultra (key 1, 30 RPM) + NVIDIA NIM nemotron-3-ultra (key 2, 30 RPM)
+claude-sonnet-5   → 1 deployment: OpenCode Zen mimo-v2.5-free
+claude-haiku-4-5  → 2 deployments: NVIDIA NIM gpt-oss-120b (key 1, 30 RPM) + NVIDIA NIM gpt-oss-120b (key 2, 30 RPM)
+agnes-2.0-flash   → 1 deployment: Agnes AI agnes-2.0-flash
+deepseek-v4-flash → 1 deployment: OpenCode Zen deepseek-v4-flash-free
 ```
 
 ## Prerequisites
@@ -162,10 +163,11 @@ Features:
 
 | Alias                       | Backend                                                                | RPM   |
 | --------------------------- | ---------------------------------------------------------------------- | ----- |
-| `claude-opus-4-8`           | NVIDIA Nemotron 3 Ultra 550B (key 1) / NVIDIA Nemotron 3 Ultra (key 2) | 40/40 |
-| `claude-sonnet-5`           | OpenCode Zen hy3-free / OpenCode Zen mimo-v2.5-free                    | 40/40 |
-| `claude-haiku-4-5-20251001` | NVIDIA NIM gpt-oss-120b (key 1) / NVIDIA gpt-oss-120b (key 2)          | 40/40 |
-| `agnes-2.0-flash`           | Agnes 2.0 Flash                                                        | 30    |
+| `claude-opus-4-8`           | NVIDIA Nemotron 3 Ultra 550B (key 1) / NVIDIA Nemotron 3 Ultra (key 2) | 30/30 |
+| `claude-sonnet-5`           | OpenCode Zen mimo-v2.5-free                                            | —     |
+| `claude-haiku-4-5-20251001` | NVIDIA NIM gpt-oss-120b (key 1) / NVIDIA gpt-oss-120b (key 2)          | 30/30 |
+| `agnes-2.0-flash`           | Agnes 2.0 Flash                                                        | —     |
+| `deepseek-v4-flash`         | OpenCode Zen deepseek-v4-flash-free                                    | —     |
 
 ## Project Structure
 
