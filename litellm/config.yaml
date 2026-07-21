@@ -1,12 +1,13 @@
 model_list:
   - model_name: claude-opus-4-8
     litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
-      api_key: os.environ/NVIDIA_API_KEY_1
+      model: openai/hy3-free
+      api_base: https://opencode.ai/zen/v1
+      api_key: os.environ/OPENCODE_API_KEY
     rpm: 30
     model_info:
-      input_cost_per_token: 0.0000005
-      output_cost_per_token: 0.0000022
+      input_cost_per_token: 0.000000132
+      output_cost_per_token: 0.000000528
 
   - model_name: claude-opus-4-8
     litellm_params:
@@ -14,28 +15,27 @@ model_list:
       api_key: os.environ/NVIDIA_API_KEY_2
     rpm: 30
     model_info:
-      input_cost_per_token: 0.0000005
-      output_cost_per_token: 0.0000022
+      input_cost_per_token: 0.00000050
+      output_cost_per_token: 0.00000220
 
   - model_name: claude-sonnet-5
     litellm_params:
-      model: openai/hy3-free
+      model: openai/deepseek-v4-flash-free
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
     rpm: 30
     model_info:
-      input_cost_per_token: 0.000002
-      output_cost_per_token: 0.000010
+      input_cost_per_token: 0.00000014
+      output_cost_per_token: 0.00000028
 
   - model_name: claude-sonnet-5
     litellm_params:
-      model: openai/mimo-v2.5-free
-      api_base: https://opencode.ai/zen/v1
-      api_key: os.environ/OPENCODE_API_KEY
+      model: nvidia_nim/deepseek-ai/deepseek-v4-flash
+      api_key: os.environ/NVIDIA_API_KEY_1
     rpm: 30
     model_info:
-      input_cost_per_token: 0.000002
-      output_cost_per_token: 0.000010
+      input_cost_per_token: 0.00000014
+      output_cost_per_token: 0.00000028
 
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
@@ -43,8 +43,8 @@ model_list:
       api_key: os.environ/NVIDIA_API_KEY_1
     rpm: 30
     model_info:
-      input_cost_per_token: 0.0000001
-      output_cost_per_token: 0.0000004
+      input_cost_per_token: 0.00000003
+      output_cost_per_token: 0.00000018
 
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
@@ -52,8 +52,8 @@ model_list:
       api_key: os.environ/NVIDIA_API_KEY_2
     rpm: 30
     model_info:
-      input_cost_per_token: 0.0000001
-      output_cost_per_token: 0.0000004
+      input_cost_per_token: 0.00000003
+      output_cost_per_token: 0.00000018
 
   - model_name: agnes-2.0-flash
     litellm_params:
@@ -62,8 +62,8 @@ model_list:
       api_key: os.environ/AGNES_API_KEY
     rpm: 30
     model_info:
-      input_cost_per_token: 0.000002
-      output_cost_per_token: 0.000010
+      input_cost_per_token: 0.00000015
+      output_cost_per_token: 0.00000050
 
 litellm_settings:
   drop_params: true
