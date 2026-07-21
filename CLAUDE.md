@@ -8,28 +8,28 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 
 ## Architecture
 
-**Model aliasing:** Virtual model names (e.g., `claude-opus-4-8`) map to real provider models. Clients request the virtual name; LiteLLM load-balances across multiple backend deployments per virtual model.
+**Model aliasing:** Virtual model names map to real provider models. Clients request the virtual name; LiteLLM load-balances across deployments.
 
-**Backend deployments (per-deployment RPM: 40 / 40 split):**
+**Backend deployments:**
 
-| Virtual Model               | Deployment 1 (40 RPM)                                  | Deployment 2 (40 RPM)                              |
-| --------------------------- | ------------------------------------------------------ | -------------------------------------------------- |
-| `claude-opus-4-8`           | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (key 1) | `openai/nvidia/nemotron-3-ultra-550b-a55b` (key 2) |
-| `claude-sonnet-5`           | `openai/hy3-free` (OpenCode Zen)                       | `openai/mimo-v2.5-free` (OpenCode Zen)             |
-| `claude-haiku-4-5-20251001` | `nvidia_nim/openai/gpt-oss-120b` (key 1)               | `openai/openai/gpt-oss-120b` (key 2)               |
-| `agnes-2.0-flash`           | `openai/agnes-2.0-flash` (Agnes AI, 30 RPM)            | —                                                  |
+| Virtual Model               | Deployment 1                                   | Deployment 2                               |
+| --------------------------- | ---------------------------------------------- | ------------------------------------------ |
+| `claude-opus-4-8`           | `nvidia_nim/…nemotron-3…` (key 1, 30 RPM)      | `nvidia_nim/…nemotron-3…` (key 2, 30 RPM)  |
+| `claude-sonnet-5`           | `openai/hy3-free` (OpenCode Zen)               | —                                          |
+| `claude-haiku-4-5-20251001` | `nvidia_nim/…gpt-oss-120b` (key 1, 30 RPM)     | `nvidia_nim/…gpt-oss-120b` (key 2, 30 RPM) |
+| `agnes-2.0-flash`           | `openai/agnes-2.0-flash` (Agnes AI)            | —                                          |
+| `deepseek-v4-flash`         | `openai/deepseek-v4-flash-free` (OpenCode Zen) | —                                          |
 
-**Rate limits (enforced via `enforce_model_rate_limits`):**
+**Fallback chain (when all primary deployments are exhausted):**
 
-| Provider     | RPM | TPM     | Scope                          |
-| ------------ | --- | ------- | ------------------------------ |
-| NVIDIA NIM   | 40  | 500,000 | Per API key (both deployments) |
-| OpenCode Zen | 40  | 100,000 | Per API key (both deployments) |
-| Agnes AI     | 30  | —       | Per API key                    |
+| Model             | Fallback to         |
+| ----------------- | ------------------- |
+| `claude-opus-4-8` | `agnes-2.0-flash`   |
+| `claude-sonnet-5` | `deepseek-v4-flash` |
 
-**NVIDIA NIM worker limits:** 32 concurrent requests per worker. Different models = different worker pools = independent limits. Using multiple API keys across different models doubles effective throughput.
+**Rate limits** enforced per-deployment via `enforce_model_rate_limits` — set at 30 RPM on NVIDIA NIM deployments. OpenCode Zen and Agnes AI models have no RPM limit set (provider-side limits apply).
 
-**Fallback safety net:** Each primary model falls back to `agnes-2.0-flash` if all its deployments are exhausted or rate-limited. `simple-shuffle` handles load balancing across deployments per model.
+**Load balancing:** LiteLLM default (`simple-shuffle`) distributes requests across deployments per model name.
 
 ## Patched Image (Nemotron thinking-stream + empty-choices fix)
 
@@ -87,9 +87,11 @@ python -c "import yaml; yaml.safe_load(open('litellm/config.yaml'))"
 
 Source of truth for routing and provider settings. Key behaviors:
 
-- `routing_strategy: simple-shuffle` — RPM-aware random distribution across deployments (no fallback chain)
-- `optional_pre_call_checks: [enforce_model_rate_limits]` — hard-enforces per-deployment RPM/TPM
-- `drop_params: true`, `use_chat_completions_url_for_anthropic_messages: true`, `reasoning_auto_summary: true`, `cache: true` (Redis)
+**`litellm_settings`:** `drop_params: true`, `use_chat_completions_url_for_anthropic_messages: true`, `reasoning_auto_summary: true`, `request_timeout: 120`, Redis-backed `cache: true` (600s TTL, 100 max connections)
+
+**`router_settings`:** `optional_pre_call_checks: [enforce_model_rate_limits]` — hard-enforces per-deployment RPM. Fallback chain set via `fallbacks: [claude-opus-4-8 → agnes-2.0-flash, claude-sonnet-5 → deepseek-v4-flash]`. Redis connection for distributed rate limiting.
+
+**`general_settings`:** `master_key` auth, `database_url` for PostgreSQL usage tracking.
 
 ## Testing
 
