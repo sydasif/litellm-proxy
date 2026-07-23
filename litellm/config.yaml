@@ -53,15 +53,6 @@ model_list:
       input_cost_per_token: 0.00000016
       output_cost_per_token: 0.00000030
 
-  - model_name: deepseek-v4-flash
-    litellm_params:
-      model: openai/deepseek-v4-flash-free
-      api_base: https://opencode.ai/zen/v1
-      api_key: os.environ/OPENCODE_API_KEY
-    model_info:
-      input_cost_per_token: 0.00000014
-      output_cost_per_token: 0.00000028
-
 litellm_settings:
   drop_params: true
   use_chat_completions_url_for_anthropic_messages: true
@@ -82,7 +73,6 @@ router_settings:
   fallbacks:
     - claude-opus-4-8: ["agnes-2.0-flash"]
     - claude-sonnet-5: ["agnes-2.0-flash"]
-    - deepseek-v4-flash: ["agnes-2.0-flash"]
     - claude-haiku-4-5-20251001: ["agnes-2.0-flash"]
   redis_host: os.environ/REDIS_HOST
   redis_port: os.environ/REDIS_PORT
