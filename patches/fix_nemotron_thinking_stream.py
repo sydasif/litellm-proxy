@@ -252,6 +252,174 @@ def _patch_streaming(path: str) -> bool:
     print(f"PATCHED streaming_iterator.py: added thinking_delta/text-block guard in {count} transition path(s)")
     return True
 
+def _patch_streaming_dual_content_recovery(path: str) -> bool:
+    """Recover text silently dropped when Nemotron sends reasoning_content +
+    content in the same chunk. Translation picks reasoning (thinking_delta)
+    and drops the text. We detect this, store the dropped text, and on the
+    next __next__/__anext__ call emit a block transition (close thinking →
+    open text) plus the recovered text_delta."""
+    with io.open(path, encoding="utf-8") as fh:
+        src = fh.read()
+
+    count = 0
+
+    # --- 1. Add self._recovered_text to __init__ ---
+    init_old = (
+        '        self.chunk_queue: deque = deque()\n'
+    )
+    init_new = (
+        '        self.chunk_queue: deque = deque()\n'
+        '        # Nemotron dual-content recovery: stores text dropped when a\n'
+        '        # chunk carries both reasoning_content and content.\n'
+        '        self._recovered_text: Optional[str] = None\n'
+    )
+    if init_old in src:
+        src = src.replace(init_old, init_new, 1)
+        count += 1
+
+    # --- 2. Recovery block in sync __next__ (20-space indent) ---
+    sync_recovery_old = (
+        '            # Always return queued chunks first\n'
+        '            if self.chunk_queue:\n'
+        '                return self.chunk_queue.popleft()\n'
+        '\n'
+        '            # Queue initial chunks if not sent yet\n'
+        '            if self.sent_first_chunk is False:\n'
+    )
+    sync_recovery_new = (
+        '            # Always return queued chunks first\n'
+        '            if self.chunk_queue:\n'
+        '                return self.chunk_queue.popleft()\n'
+        '\n'
+        '            # Nemotron dual-content recovery: emit delayed text from\n'
+        '            # the previous chunk that carried reasoning_content + content.\n'
+        '            if getattr(self, "_recovered_text", None) is not None:\n'
+        '                _rtxt = self._recovered_text\n'
+        '                self._recovered_text = None\n'
+        '                self.chunk_queue.append(\n'
+        '                    {"type": "content_block_stop", "index": self.current_content_block_index}\n'
+        '                )\n'
+        '                self._increment_content_block_index()\n'
+        '                self.current_content_block_type = "text"\n'
+        '                self.current_content_block_start = {"type": "text", "text": ""}\n'
+        '                self.chunk_queue.append(\n'
+        '                    {\n'
+        '                        "type": "content_block_start",\n'
+        '                        "index": self.current_content_block_index,\n'
+        '                        "content_block": self.current_content_block_start,\n'
+        '                    }\n'
+        '                )\n'
+        '                self.chunk_queue.append(\n'
+        '                    {\n'
+        '                        "type": "content_block_delta",\n'
+        '                        "index": self.current_content_block_index,\n'
+        '                        "delta": {"type": "text_delta", "text": _rtxt},\n'
+        '                    }\n'
+        '                )\n'
+        '                self.sent_content_block_finish = False\n'
+        '                return self.chunk_queue.popleft()\n'
+        '\n'
+        '            # Queue initial chunks if not sent yet\n'
+        '            if self.sent_first_chunk is False:\n'
+    )
+    if sync_recovery_old in src:
+        src = src.replace(sync_recovery_old, sync_recovery_new, 1)
+        count += 1
+
+    # --- 3. Recovery block in async __anext__ (24-space indent) ---
+    async_recovery_old = (
+        '            # Always return queued chunks first\n'
+        '            if self.chunk_queue:\n'
+        '                return self.chunk_queue.popleft()\n'
+        '\n'
+        '            # Queue initial chunks if not sent yet\n'
+        '            if self.sent_first_chunk is False:\n'
+    )
+    # Only replace the second occurrence (inside __anext__) — skip first (__next__ already patched).
+    # Use rsplit to target the last occurrence.
+    if async_recovery_old in src:
+        idx = src.rfind(async_recovery_old)
+        if idx != -1:
+            src = src[:idx] + (
+                '            # Always return queued chunks first\n'
+                '            if self.chunk_queue:\n'
+                '                return self.chunk_queue.popleft()\n'
+                '\n'
+                '            # Nemotron dual-content recovery: emit delayed text from\n'
+                '            # the previous chunk that carried reasoning_content + content.\n'
+                '            if getattr(self, "_recovered_text", None) is not None:\n'
+                '                _rtxt = self._recovered_text\n'
+                '                self._recovered_text = None\n'
+                '                self.chunk_queue.append(\n'
+                '                    {"type": "content_block_stop", "index": self.current_content_block_index}\n'
+                '                )\n'
+                '                self._increment_content_block_index()\n'
+                '                self.current_content_block_type = "text"\n'
+                '                self.current_content_block_start = {"type": "text", "text": ""}\n'
+                '                self.chunk_queue.append(\n'
+                '                    {\n'
+                '                        "type": "content_block_start",\n'
+                '                        "index": self.current_content_block_index,\n'
+                '                        "content_block": self.current_content_block_start,\n'
+                '                    }\n'
+                '                )\n'
+                '                self.chunk_queue.append(\n'
+                '                    {\n'
+                '                        "type": "content_block_delta",\n'
+                '                        "index": self.current_content_block_index,\n'
+                '                        "delta": {"type": "text_delta", "text": _rtxt},\n'
+                '                    }\n'
+                '                )\n'
+                '                self.sent_content_block_finish = False\n'
+                '                return self.chunk_queue.popleft()\n'
+                '\n'
+                '            # Queue initial chunks if not sent yet\n'
+                '            if self.sent_first_chunk is False:\n'
+            ) + src[idx + len(async_recovery_old):]
+            count += 1
+
+    # --- 4. Detection after processed_chunk in sync __next__ ---
+    # Find the anchor: translate_streaming call followed by "# Check if this is a usage chunk"
+    # There are two occurrences (sync and async). Replace both with replaceAll.
+    detect_marker = (
+        '                )\n'
+        '\n'
+        '                # Check if this is a usage chunk and we have a held stop_reason chunk\n'
+    )
+    detect_recovery = (
+        '                )\n'
+        '\n'
+        '                # Nemotron dual-content recovery: when a chunk carries both\n'
+        '                # reasoning_content and content, translation picks reasoning\n'
+        '                # (thinking_delta) and silently drops the text. Store the\n'
+        '                # dropped text so it can be recovered on the next iteration.\n'
+        '                _p_delta = processed_chunk.get("delta") or {}\n'
+        '                if (\n'
+        '                    _p_delta.get("type") == "thinking_delta"\n'
+        '                    and chunk.choices\n'
+        '                ):\n'
+        '                    _raw = getattr(chunk.choices[0], "delta", None)\n'
+        '                    _raw_content = getattr(_raw, "content", None) if _raw else None\n'
+        '                    if _raw_content and len(_raw_content) > 0:\n'
+        '                        self._recovered_text = _raw_content\n'
+        '\n'
+        '                # Check if this is a usage chunk and we have a held stop_reason chunk\n'
+    )
+    # Two occurrences: sync __next__ and async __anext__. Replace both.
+    if detect_marker in src:
+        src = src.replace(detect_marker, detect_recovery)
+        count += 2
+
+    if count == 0:
+        print("SKIP streaming_iterator.py dual-content recovery: targets not found")
+        return False
+
+    with io.open(path, "w", encoding="utf-8") as fh:
+        fh.write(src)
+    print(f"PATCHED streaming_iterator.py: added dual-content text recovery ({count} patches)")
+    return True
+
+
 def _patch_streaming_empty_choices(path: str) -> bool:
     """Patch streaming_iterator.py to handle empty choices in chunk."""
     with io.open(path, "r", encoding="utf-8") as fh:
@@ -286,6 +454,7 @@ if __name__ == "__main__":
 
     if os.path.exists(STREAMING_FILE):
         ok = _patch_streaming(STREAMING_FILE) and ok
+        ok = _patch_streaming_dual_content_recovery(STREAMING_FILE) and ok
         ok = _patch_streaming_empty_choices(STREAMING_FILE) and ok
     else:
         print(f"ERROR: {STREAMING_FILE} not found")
