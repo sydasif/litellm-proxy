@@ -41,7 +41,7 @@ Each claude model maps to **multiple backend deployments** across different prov
 
 ```bash
 claude-opus-4-8   → 2 deployments: NVIDIA NIM nemotron-3-ultra (key 1, RPM 30) + NVIDIA NIM nemotron-3-ultra (key 2, RPM 30)
-claude-sonnet-5   → 2 deployments: OpenCode Zen deepseek-v4-flash-free (RPM 30) + big-pickle/MiMo-v2.5 (RPM 30)
+claude-sonnet-5   → 2 deployments: big-pickle/MiMo-v2.5 (order 1, RPM 30) + deepseek-v4-flash-free (order 2, RPM 30)
 claude-haiku-4-5  → 4 deployments: Gemini 3.5-flash-lite (order 1, 2 keys, RPM 15, TPM 250K) + Gemini 3.1-flash-lite (order 2, 2 keys, RPM 15, TPM 250K)
 agnes-2.0-flash   → 1 deployment: Agnes AI agnes-2.0-flash
 ```
@@ -166,11 +166,13 @@ Features:
 | Alias                       | Backend                                                                           | Order | RPM/TPM      |
 | --------------------------- | --------------------------------------------------------------------------------- | ----- | ------------ |
 | `claude-opus-4-8`           | NVIDIA Nemotron 3 Ultra 550B (key 1 + key 2)                                      | —     | 30/— each    |
-| `claude-sonnet-5`           | OpenCode Zen deepseek-v4-flash-free + big-pickle (MiMo-v2.5)                      | —     | 30/— each    |
+| `claude-sonnet-5`           | OpenCode Zen big-pickle/MiMo-v2.5 (order 1) + deepseek-v4-flash-free (order 2)    | 1, 2  | 30/— each    |
 | `claude-haiku-4-5-20251001` | Gemini 3.5-flash-lite (order 1, 2 keys) + Gemini 3.1-flash-lite (order 2, 2 keys) | 1, 2  | 15/250K each |
 | `agnes-2.0-flash`           | Agnes 2.0 Flash                                                                   | —     | —            |
 
 **Haiku failover cascade:** `3.5 KEY_1 → 3.5 KEY_2 → 3.1 KEY_1 → 3.1 KEY_2 → claude-sonnet-5 → agnes-2.0-flash`
+
+**Sonnet failover cascade:** `big-pickle (MiMo-v2.5) → deepseek-v4-flash-free → agnes-2.0-flash`
 
 ## Project Structure
 

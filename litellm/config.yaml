@@ -19,9 +19,10 @@ model_list:
 
   - model_name: claude-sonnet-5
     litellm_params:
-      model: openai/deepseek-v4-flash-free
+      model: openai/big-pickle
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
+      order: 1
     rpm: 30
     model_info:
       input_cost_per_token: 0.00000014
@@ -29,9 +30,10 @@ model_list:
 
   - model_name: claude-sonnet-5
     litellm_params:
-      model: openai/big-pickle
+      model: openai/deepseek-v4-flash-free
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
+      order: 2
     rpm: 30
     model_info:
       input_cost_per_token: 0.00000014

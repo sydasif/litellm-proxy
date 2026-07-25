@@ -12,12 +12,12 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 
 **Backend deployments:**
 
-| Virtual Model               | Deployment 1                                               | Deployment 2                                               | Deployment 3                                               | Deployment 4                                               |
-| --------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- |
-| `claude-opus-4-8`           | `nvidia_nim/…nemotron-3…` (key 1, RPM 30)                  | `nvidia_nim/…nemotron-3…` (key 2, RPM 30)                  | —                                                          | —                                                          |
-| `claude-sonnet-5`           | `openai/deepseek-v4-flash-free` (OpenCode Zen, RPM 30)     | `openai/big-pickle` (MiMo-v2.5, OpenCode Zen, RPM 30)      | —                                                          | —                                                          |
-| `claude-haiku-4-5-20251001` | `gemini-3.5-flash-lite` (key 1, order 1, RPM 15, TPM 250K) | `gemini-3.5-flash-lite` (key 2, order 1, RPM 15, TPM 250K) | `gemini-3.1-flash-lite` (key 1, order 2, RPM 15, TPM 250K) | `gemini-3.1-flash-lite` (key 2, order 2, RPM 15, TPM 250K) |
-| `agnes-2.0-flash`           | `openai/agnes-2.0-flash` (Agnes AI)                        | —                                                          | —                                                          | —                                                          |
+| Virtual Model               | Deployment 1                                                   | Deployment 2                                                    | Deployment 3                                               | Deployment 4                                               |
+| --------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- |
+| `claude-opus-4-8`           | `nvidia_nim/…nemotron-3…` (key 1, RPM 30)                      | `nvidia_nim/…nemotron-3…` (key 2, RPM 30)                       | —                                                          | —                                                          |
+| `claude-sonnet-5`           | `openai/big-pickle` (MiMo-v2.5, OpenCode Zen, RPM 30, order 1) | `openai/deepseek-v4-flash-free` (OpenCode Zen, RPM 30, order 2) | —                                                          | —                                                          |
+| `claude-haiku-4-5-20251001` | `gemini-3.5-flash-lite` (key 1, order 1, RPM 15, TPM 250K)     | `gemini-3.5-flash-lite` (key 2, order 1, RPM 15, TPM 250K)      | `gemini-3.1-flash-lite` (key 1, order 2, RPM 15, TPM 250K) | `gemini-3.1-flash-lite` (key 2, order 2, RPM 15, TPM 250K) |
+| `agnes-2.0-flash`           | `openai/agnes-2.0-flash` (Agnes AI)                            | —                                                               | —                                                          | —                                                          |
 
 **Fallback chain (when all primary deployments are exhausted):**
 
@@ -35,6 +35,12 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 - `enable_weighted_failover: true` retries within same order tier using weights
 
 **Haiku full failover cascade:** `3.5 KEY_1 → 3.5 KEY_2 → 3.1 KEY_1 → 3.1 KEY_2 → claude-sonnet-5 → agnes-2.0-flash`
+
+**Sonnet order-based failover:** Within the sonnet slot, deployments are prioritized by `order`:
+
+- `order: 1` → `big-pickle` (MiMo-v2.5, primary)
+- `order: 2` → `deepseek-v4-flash-free` (secondary)
+- Sonnet full cascade: `big-pickle → deepseek-v4-flash-free → agnes-2.0-flash`
 
 **Rate limits** enforced per-deployment via `enforce_model_rate_limits` — set at 30 RPM on NVIDIA NIM and OpenCode Zen deployments, 15 RPM / 250K TPM on Gemini deployments.
 
