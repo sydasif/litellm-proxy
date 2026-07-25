@@ -18,10 +18,13 @@ A proxy gateway that routes **Claude Code** through **LiteLLM** to multiple AI b
 
 ## Features
 
-- **Multi-provider**: Access NVIDIA NIM and OpenCode Zen through a single endpoint
-- **Load balancing**: `simple-shuffle` distributes requests across multiple model deployments
+- **Multi-provider**: Access NVIDIA NIM, OpenCode Zen, Agnes AI, and Google Gemini through a single endpoint
+- **Load balancing**: `simple-shuffle` distributes requests across multiple model deployments with weighted routing
+- **Order-based failover**: Haiku slot uses priority tiers — Gemini 3.5 (order 1) → Gemini 3.1 (order 2) → fallback chain
 - **Rate limiting**: RPM/TPM enforcement via `enforce_model_rate_limits`
 - **Parameter normalization**: Drops unsupported parameters (`drop_params: true`) for cross-provider compatibility
+- **Tool compatibility**: Strips `strict: null` from tool definitions (`additional_drop_params`) for sglang-based backends
+- **Weighted failover**: Retries within same priority tier before escalating across tiers
 - **Anthropic compatibility**: Routes all providers via `/v1/chat/completions` for Claude Code integration
 - **Dockerized**: Builds a patched LiteLLM image (`litellm-proxy:patched`) with Nemotron streaming fixes
 - **Redis caching**: Caches repeated prompts for cost savings and latency reduction
@@ -37,11 +40,10 @@ A proxy gateway that routes **Claude Code** through **LiteLLM** to multiple AI b
 Each claude model maps to **multiple backend deployments** across different providers. LiteLLM's `simple-shuffle` router distributes requests, and `enforce_model_rate_limits` blocks requests before hitting provider limits.
 
 ```bash
-claude-opus-4-8   → 2 deployments: NVIDIA NIM nemotron-3-ultra (key 1, 30 RPM) + NVIDIA NIM nemotron-3-ultra (key 2, 30 RPM)
-claude-sonnet-5   → 1 deployment: OpenCode Zen mimo-v2.5-free
-claude-haiku-4-5  → 2 deployments: NVIDIA NIM gpt-oss-120b (key 1, 30 RPM) + NVIDIA NIM gpt-oss-120b (key 2, 30 RPM)
+claude-opus-4-8   → 2 deployments: NVIDIA NIM nemotron-3-ultra (key 1, RPM 30) + NVIDIA NIM nemotron-3-ultra (key 2, RPM 30)
+claude-sonnet-5   → 2 deployments: OpenCode Zen deepseek-v4-flash-free (RPM 30) + big-pickle/MiMo-v2.5 (RPM 30)
+claude-haiku-4-5  → 4 deployments: Gemini 3.5-flash-lite (order 1, 2 keys, RPM 15, TPM 250K) + Gemini 3.1-flash-lite (order 2, 2 keys, RPM 15, TPM 250K)
 agnes-2.0-flash   → 1 deployment: Agnes AI agnes-2.0-flash
-deepseek-v4-flash → 1 deployment: OpenCode Zen deepseek-v4-flash-free
 ```
 
 ## Prerequisites
@@ -161,13 +163,14 @@ Features:
 
 ### Available Models
 
-| Alias                       | Backend                                                                | RPM   |
-| --------------------------- | ---------------------------------------------------------------------- | ----- |
-| `claude-opus-4-8`           | NVIDIA Nemotron 3 Ultra 550B (key 1) / NVIDIA Nemotron 3 Ultra (key 2) | 30/30 |
-| `claude-sonnet-5`           | OpenCode Zen mimo-v2.5-free                                            | —     |
-| `claude-haiku-4-5-20251001` | NVIDIA NIM gpt-oss-120b (key 1) / NVIDIA gpt-oss-120b (key 2)          | 30/30 |
-| `agnes-2.0-flash`           | Agnes 2.0 Flash                                                        | —     |
-| `deepseek-v4-flash`         | OpenCode Zen deepseek-v4-flash-free                                    | —     |
+| Alias                       | Backend                                                                           | Order | RPM/TPM      |
+| --------------------------- | --------------------------------------------------------------------------------- | ----- | ------------ |
+| `claude-opus-4-8`           | NVIDIA Nemotron 3 Ultra 550B (key 1 + key 2)                                      | —     | 30/— each    |
+| `claude-sonnet-5`           | OpenCode Zen deepseek-v4-flash-free + big-pickle (MiMo-v2.5)                      | —     | 30/— each    |
+| `claude-haiku-4-5-20251001` | Gemini 3.5-flash-lite (order 1, 2 keys) + Gemini 3.1-flash-lite (order 2, 2 keys) | 1, 2  | 15/250K each |
+| `agnes-2.0-flash`           | Agnes 2.0 Flash                                                                   | —     | —            |
+
+**Haiku failover cascade:** `3.5 KEY_1 → 3.5 KEY_2 → 3.1 KEY_1 → 3.1 KEY_2 → claude-sonnet-5 → agnes-2.0-flash`
 
 ## Project Structure
 
