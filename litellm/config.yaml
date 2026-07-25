@@ -22,6 +22,17 @@ model_list:
       model: openai/deepseek-v4-flash-free
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
+    rpm: 30
+    model_info:
+      input_cost_per_token: 0.00000014
+      output_cost_per_token: 0.00000028
+
+  - model_name: claude-sonnet-5
+    litellm_params:
+      model: openai/big-pickle
+      api_base: https://opencode.ai/zen/v1
+      api_key: os.environ/OPENCODE_API_KEY
+    rpm: 30
     model_info:
       input_cost_per_token: 0.00000014
       output_cost_per_token: 0.00000028
@@ -30,6 +41,7 @@ model_list:
     litellm_params:
       model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY_1
+      additional_drop_params: ["tools[*].strict"]
     rpm: 15
     tpm: 250000
     model_info:
@@ -40,6 +52,7 @@ model_list:
     litellm_params:
       model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY_2
+      additional_drop_params: ["tools[*].strict"]
     rpm: 15
     tpm: 250000
     model_info:
@@ -51,6 +64,7 @@ model_list:
       model: openai/agnes-2.0-flash
       api_base: https://apihub.agnes-ai.com/v1
       api_key: os.environ/AGNES_API_KEY
+      additional_drop_params: ["tools[*].strict"]
     model_info:
       input_cost_per_token: 0.00000016
       output_cost_per_token: 0.00000030
@@ -75,7 +89,7 @@ router_settings:
   fallbacks:
     - claude-opus-4-8: ["agnes-2.0-flash"]
     - claude-sonnet-5: ["agnes-2.0-flash"]
-    - claude-haiku-4-5-20251001: ["agnes-2.0-flash"]
+    - claude-haiku-4-5-20251001: ["claude-sonnet-5"]
   redis_host: os.environ/REDIS_HOST
   redis_port: os.environ/REDIS_PORT
   redis_password: os.environ/REDIS_PASSWORD
