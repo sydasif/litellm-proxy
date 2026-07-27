@@ -19,7 +19,7 @@ model_list:
 
   - model_name: claude-sonnet-5
     litellm_params:
-      model: openai/big-pickle
+      model: openai/mimo-v2.5-free
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
       order: 1
