@@ -44,9 +44,8 @@ model_list:
       model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY_1
       additional_drop_params: ["tools[*].strict"]
-      order: 1
     rpm: 15
-    tpm: 250000
+    tpm: 240000
     model_info:
       input_cost_per_token: 0.00000003
       output_cost_per_token: 0.00000018
@@ -56,46 +55,33 @@ model_list:
       model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY_2
       additional_drop_params: ["tools[*].strict"]
-      order: 1
     rpm: 15
-    tpm: 250000
+    tpm: 240000
     model_info:
       input_cost_per_token: 0.00000003
       output_cost_per_token: 0.00000018
 
-  - model_name: claude-haiku-4-5-20251001
+  - model_name: gemini
     litellm_params:
       model: gemini/gemini-3.1-flash-lite
       api_key: os.environ/GEMINI_API_KEY_1
       additional_drop_params: ["tools[*].strict"]
-      order: 2
     rpm: 15
-    tpm: 250000
+    tpm: 240000
     model_info:
       input_cost_per_token: 0.00000003
       output_cost_per_token: 0.00000018
 
-  - model_name: claude-haiku-4-5-20251001
+  - model_name: gemini
     litellm_params:
       model: gemini/gemini-3.1-flash-lite
       api_key: os.environ/GEMINI_API_KEY_2
       additional_drop_params: ["tools[*].strict"]
-      order: 2
     rpm: 15
-    tpm: 250000
+    tpm: 240000
     model_info:
       input_cost_per_token: 0.00000003
       output_cost_per_token: 0.00000018
-
-  - model_name: agnes-2.0-flash
-    litellm_params:
-      model: openai/agnes-2.0-flash
-      api_base: https://apihub.agnes-ai.com/v1
-      api_key: os.environ/AGNES_API_KEY
-      additional_drop_params: ["tools[*].strict"]
-    model_info:
-      input_cost_per_token: 0.00000016
-      output_cost_per_token: 0.00000030
 
 litellm_settings:
   drop_params: true
@@ -116,9 +102,7 @@ router_settings:
   optional_pre_call_checks:
     - enforce_model_rate_limits
   fallbacks:
-    - claude-opus-4-8: ["agnes-2.0-flash"]
-    - claude-sonnet-5: ["agnes-2.0-flash"]
-    - claude-haiku-4-5-20251001: ["claude-sonnet-5"]
+    - claude-haiku-4-5-20251001: ["gemini"]
   redis_host: os.environ/REDIS_HOST
   redis_port: os.environ/REDIS_PORT
   redis_password: os.environ/REDIS_PASSWORD
