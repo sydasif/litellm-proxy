@@ -1,5 +1,5 @@
 model_list:
-  - model_name: claude-opus-4-8
+  - model_name: claude-opus-5
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
       api_key: os.environ/NVIDIA_API_KEY_1
@@ -8,7 +8,7 @@ model_list:
       input_cost_per_token: 0.00000050
       output_cost_per_token: 0.00000220
 
-  - model_name: claude-opus-4-8
+  - model_name: claude-opus-5
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
       api_key: os.environ/NVIDIA_API_KEY_2
