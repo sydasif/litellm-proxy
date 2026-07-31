@@ -3,7 +3,8 @@ model_list:
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
       api_key: os.environ/NVIDIA_API_KEY_1
-    rpm: 30
+      max_parallel_requests: 5
+    rpm: 40
     model_info:
       input_cost_per_token: 0.00000050
       output_cost_per_token: 0.00000220
@@ -12,7 +13,8 @@ model_list:
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
       api_key: os.environ/NVIDIA_API_KEY_2
-    rpm: 30
+      max_parallel_requests: 5
+    rpm: 40
     model_info:
       input_cost_per_token: 0.00000050
       output_cost_per_token: 0.00000220
@@ -22,8 +24,9 @@ model_list:
       model: openai/mimo-v2.5-free
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
+      max_parallel_requests: 5
       order: 1
-    rpm: 30
+    rpm: 40
     model_info:
       input_cost_per_token: 0.00000014
       output_cost_per_token: 0.00000028
@@ -33,8 +36,9 @@ model_list:
       model: openai/deepseek-v4-flash-free
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
+      max_parallel_requests: 5
       order: 2
-    rpm: 30
+    rpm: 40
     model_info:
       input_cost_per_token: 0.00000014
       output_cost_per_token: 0.00000028
@@ -44,6 +48,7 @@ model_list:
       model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY_1
       additional_drop_params: ["tools[*].strict"]
+      max_parallel_requests: 5
     rpm: 15
     tpm: 240000
     model_info:
@@ -55,6 +60,7 @@ model_list:
       model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY_2
       additional_drop_params: ["tools[*].strict"]
+      max_parallel_requests: 5
     rpm: 15
     tpm: 240000
     model_info:
@@ -66,6 +72,7 @@ model_list:
       model: gemini/gemini-3.1-flash-lite
       api_key: os.environ/GEMINI_API_KEY_1
       additional_drop_params: ["tools[*].strict"]
+      max_parallel_requests: 5
     rpm: 15
     tpm: 240000
     model_info:
@@ -77,6 +84,7 @@ model_list:
       model: gemini/gemini-3.1-flash-lite
       api_key: os.environ/GEMINI_API_KEY_2
       additional_drop_params: ["tools[*].strict"]
+      max_parallel_requests: 5
     rpm: 15
     tpm: 240000
     model_info:
