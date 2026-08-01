@@ -46,10 +46,10 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python3", "-c", "import requests; requests.get('http://localhost:4000/health/liveliness')"]
-      interval: 30s
+      interval: 60s
       timeout: 10s
       retries: 2
-      start_period: 40s
+      start_period: 70s
 
   db:
     image: postgres:16-alpine
