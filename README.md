@@ -14,13 +14,13 @@
   <a href="https://docs.docker.com/compose/"><img src="https://img.shields.io/badge/docker%20compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Compose"></a>
 </p>
 
-A proxy gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, Agnes AI) with load balancing and rate limiting.
+A proxy gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, Google Gemini) with load balancing and rate limiting.
 
 ## Features
 
-- **Multi-provider**: Access NVIDIA NIM, OpenCode Zen, Agnes AI, and Google Gemini through a single endpoint
+- **Multi-provider**: Access NVIDIA NIM, OpenCode Zen, and Google Gemini through a single endpoint
 - **Load balancing**: `simple-shuffle` distributes requests across multiple model deployments with weighted routing
-- **Order-based failover**: Haiku slot uses priority tiers — Gemini 3.5 (order 1) → Gemini 3.1 (order 2) → fallback chain
+- **Order-based failover**: Sonnet slot uses priority tiers — deepseek-v4-flash-free (order 1) → mimo-v2.5-free (order 2) → fallback chain
 - **Rate limiting**: RPM/TPM enforcement via `enforce_model_rate_limits`
 - **Parameter normalization**: Drops unsupported parameters (`drop_params: true`) for cross-provider compatibility
 - **Tool compatibility**: Strips `strict: null` from tool definitions (`additional_drop_params`) for sglang-based backends
@@ -40,10 +40,10 @@ A proxy gateway that routes **Claude Code** through **LiteLLM** to multiple AI b
 Each claude model maps to **multiple backend deployments** across different providers. LiteLLM's `simple-shuffle` router distributes requests, and `enforce_model_rate_limits` blocks requests before hitting provider limits.
 
 ```bash
-claude-opus-4-8   → 2 deployments: NVIDIA NIM nemotron-3-ultra (key 1, RPM 30) + NVIDIA NIM nemotron-3-ultra (key 2, RPM 30)
-claude-sonnet-5   → 2 deployments: big-pickle/MiMo-v2.5 (order 1, RPM 30) + deepseek-v4-flash-free (order 2, RPM 30)
-claude-haiku-4-5  → 4 deployments: Gemini 3.5-flash-lite (order 1, 2 keys, RPM 15, TPM 250K) + Gemini 3.1-flash-lite (order 2, 2 keys, RPM 15, TPM 250K)
-agnes-2.0-flash   → 1 deployment: Agnes AI agnes-2.0-flash
+claude-opus-5     → 2 deployments: NVIDIA NIM nemotron-3-ultra (key 1, RPM 40) + NVIDIA NIM nemotron-3-ultra (key 2, RPM 40)
+claude-sonnet-5   → 2 deployments: deepseek-v4-flash-free (order 1, RPM 40) + mimo-v2.5-free (order 2, RPM 40)
+claude-haiku-4-5  → 2 deployments: Gemini 3.5-flash-lite (key 1, RPM 15, TPM 240K) + Gemini 3.5-flash-lite (key 2, RPM 15, TPM 240K)
+gemini            → 2 deployments: Gemini 3.1-flash-lite (key 1, RPM 15, TPM 240K) + Gemini 3.1-flash-lite (key 2, RPM 15, TPM 240K) — fallback for sonnet/haiku
 ```
 
 ## Prerequisites
@@ -85,14 +85,14 @@ curl http://localhost:4000/health/readiness   # {"status":"healthy","db":"connec
 VKEY=$(curl -s -X POST http://localhost:4000/key/generate \
   -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"models": ["claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5-20251001"], "max_budget": 50, "budget_duration": "30d", "rpm_limit": 30}' | jq -r .key)
+  -d '{"models": ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"], "max_budget": 50, "budget_duration": "30d", "rpm_limit": 30}' | jq -r .key)
 
 # 8. Test with virtual key
 curl -H "Authorization: Bearer $VKEY" http://localhost:4000/v1/models
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer $VKEY" \
   -H "Content-Type: application/json" \
-  -d '{"model": "claude-opus-4-8", "messages": [{"role": "user", "content": "Hello!"}], "max_tokens": 50}'
+  -d '{"model": "claude-opus-5", "messages": [{"role": "user", "content": "Hello!"}], "max_tokens": 50}'
 
 # 9. Open Admin UI
 # http://localhost:4000/ui  (user: admin, pass: changeme123)
@@ -117,7 +117,7 @@ curl -H "Authorization: Bearer <YOUR_KEY>" http://localhost:4000/v1/models
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer <YOUR_KEY>" \
   -H "Content-Type: application/json" \
-  -d '{"model": "claude-opus-4-8", "messages": [{"role": "user", "content": "Hello!"}], "max_tokens": 100}'
+  -d '{"model": "claude-opus-5", "messages": [{"role": "user", "content": "Hello!"}], "max_tokens": 100}'
 ```
 
 ### Virtual Key Management
@@ -128,7 +128,7 @@ curl -X POST http://localhost:4000/key/generate \
   -H "Authorization: Bearer <MASTER_KEY>" \
   -H "Content-Type: application/json" \
   -d '{
-    "models": ["claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
+    "models": ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
     "max_budget": 50,
     "budget_duration": "30d",
     "rpm_limit": 30,
@@ -166,16 +166,16 @@ Features:
 
 ### Available Models
 
-| Alias                       | Backend                                                                           | Order | RPM/TPM      |
-| --------------------------- | --------------------------------------------------------------------------------- | ----- | ------------ |
-| `claude-opus-4-8`           | NVIDIA Nemotron 3 Ultra 550B (key 1 + key 2)                                      | —     | 30/— each    |
-| `claude-sonnet-5`           | OpenCode Zen big-pickle/MiMo-v2.5 (order 1) + deepseek-v4-flash-free (order 2)    | 1, 2  | 30/— each    |
-| `claude-haiku-4-5-20251001` | Gemini 3.5-flash-lite (order 1, 2 keys) + Gemini 3.1-flash-lite (order 2, 2 keys) | 1, 2  | 15/250K each |
-| `agnes-2.0-flash`           | Agnes 2.0 Flash                                                                   | —     | —            |
+| Alias                       | Backend                                                               | Order | RPM/TPM      |
+| --------------------------- | --------------------------------------------------------------------- | ----- | ------------ |
+| `claude-opus-5`             | NVIDIA Nemotron 3 Ultra 550B (key 1 + key 2)                          | —     | 40/— each    |
+| `claude-sonnet-5`           | OpenCode Zen deepseek-v4-flash-free (order 1) + mimo-v2.5-free (order 2) | 1, 2  | 40/— each    |
+| `claude-haiku-4-5-20251001` | Gemini 3.5-flash-lite (key 1 + key 2)                                 | —     | 15/240K each |
+| `gemini`                    | Gemini 3.1-flash-lite (key 1 + key 2) — fallback for sonnet/haiku     | —     | 15/240K each |
 
-**Haiku failover cascade:** `3.5 KEY_1 → 3.5 KEY_2 → 3.1 KEY_1 → 3.1 KEY_2 → claude-sonnet-5 → agnes-2.0-flash`
+**Haiku failover cascade:** `3.5 KEY_1 → 3.5 KEY_2 → (fallback) 3.1 KEY_1 → 3.1 KEY_2`
 
-**Sonnet failover cascade:** `big-pickle (MiMo-v2.5) → deepseek-v4-flash-free → agnes-2.0-flash`
+**Sonnet failover cascade:** `deepseek-v4-flash-free (order 1) → mimo-v2.5-free (order 2) → gemini`
 
 ## Project Structure
 

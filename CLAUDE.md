@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, Agnes AI, Google Gemini) with load balancing, rate limiting, and order-based failover. Uses Docker Compose to deploy a patched LiteLLM image that fixes Nemotron thinking-stream and empty-choices streaming bugs.
+AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, Google Gemini) with load balancing, rate limiting, and order-based failover. Uses Docker Compose to deploy a patched LiteLLM image that fixes Nemotron thinking-stream and empty-choices streaming bugs.
 
 ## Architecture
 
@@ -12,37 +12,34 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 
 **Backend deployments:**
 
-| Virtual Model               | Deployment 1                                                   | Deployment 2                                                    | Deployment 3                                               | Deployment 4                                               |
-| --------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- |
-| `claude-opus-4-8`           | `nvidia_nim/…nemotron-3…` (key 1, RPM 30)                      | `nvidia_nim/…nemotron-3…` (key 2, RPM 30)                       | —                                                          | —                                                          |
-| `claude-sonnet-5`           | `openai/big-pickle` (MiMo-v2.5, OpenCode Zen, RPM 30, order 1) | `openai/deepseek-v4-flash-free` (OpenCode Zen, RPM 30, order 2) | —                                                          | —                                                          |
-| `claude-haiku-4-5-20251001` | `gemini-3.5-flash-lite` (key 1, order 1, RPM 15, TPM 250K)     | `gemini-3.5-flash-lite` (key 2, order 1, RPM 15, TPM 250K)      | `gemini-3.1-flash-lite` (key 1, order 2, RPM 15, TPM 250K) | `gemini-3.1-flash-lite` (key 2, order 2, RPM 15, TPM 250K) |
-| `agnes-2.0-flash`           | `openai/agnes-2.0-flash` (Agnes AI)                            | —                                                               | —                                                          | —                                                          |
+| Virtual Model               | Deployment 1                                                     | Deployment 2                                                      | Deployment 3 | Deployment 4 |
+| --------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------- | ------------ | ------------ |
+| `claude-opus-5`             | `nvidia_nim/…nemotron-3…` (key 1, RPM 40)                        | `nvidia_nim/…nemotron-3…` (key 2, RPM 40)                         | —            | —            |
+| `claude-sonnet-5`           | `openai/deepseek-v4-flash-free` (OpenCode Zen, RPM 40, order 1)  | `openai/mimo-v2.5-free` (OpenCode Zen, RPM 40, order 2)           | —            | —            |
+| `claude-haiku-4-5-20251001` | `gemini-3.5-flash-lite` (key 1, RPM 15, TPM 240K)                | `gemini-3.5-flash-lite` (key 2, RPM 15, TPM 240K)                 | —            | —            |
+| `gemini`                    | `gemini-3.1-flash-lite` (key 1, RPM 15, TPM 240K)                | `gemini-3.1-flash-lite` (key 2, RPM 15, TPM 240K)                 | —            | —            |
 
 **Fallback chain (when all primary deployments are exhausted):**
 
-| Model                       | Fallback to                           |
-| --------------------------- | ------------------------------------- |
-| `claude-opus-4-8`           | `agnes-2.0-flash`                     |
-| `claude-sonnet-5`           | `agnes-2.0-flash`                     |
-| `claude-haiku-4-5-20251001` | `claude-sonnet-5` → `agnes-2.0-flash` |
+| Model                       | Fallback to |
+| --------------------------- | ----------- |
+| `claude-opus-5`             | (none)      |
+| `claude-sonnet-5`           | `gemini`    |
+| `claude-haiku-4-5-20251001` | `gemini`    |
 
-**Haiku order-based failover:** Within the haiku slot, deployments are prioritized by `order`:
+**Haiku failover:** `claude-haiku-4-5-20251001` maps to two `gemini-3.5-flash-lite` deployments that LiteLLM load-balances via `simple-shuffle`. When both are exhausted or fail, `router_settings.fallbacks` routes to the separate `gemini` model (`gemini-3.1-flash-lite`, 2 deployments).
 
-- `order: 1` → `gemini-3.5-flash-lite` (2 keys, primary)
-- `order: 2` → `gemini-3.1-flash-lite` (2 keys, secondary)
-- Router exhausts all order-1 deployments before escalating to order-2
-- `enable_weighted_failover: true` retries within same order tier using weights
-
-**Haiku full failover cascade:** `3.5 KEY_1 → 3.5 KEY_2 → 3.1 KEY_1 → 3.1 KEY_2 → claude-sonnet-5 → agnes-2.0-flash`
+**Haiku full failover cascade:** `3.5 KEY_1 → 3.5 KEY_2 → (fallback) 3.1 KEY_1 → 3.1 KEY_2`
 
 **Sonnet order-based failover:** Within the sonnet slot, deployments are prioritized by `order`:
 
-- `order: 1` → `big-pickle` (MiMo-v2.5, primary)
-- `order: 2` → `deepseek-v4-flash-free` (secondary)
-- Sonnet full cascade: `big-pickle → deepseek-v4-flash-free → agnes-2.0-flash`
+- `order: 1` → `deepseek-v4-flash-free` (primary)
+- `order: 2` → `mimo-v2.5-free` (secondary)
+- Router exhausts all order-1 deployments before escalating to order-2
+- When both are exhausted, `router_settings.fallbacks` routes to the `gemini` model
+- Sonnet full cascade: `deepseek-v4-flash-free → mimo-v2.5-free → gemini`
 
-**Rate limits** enforced per-deployment via `enforce_model_rate_limits` — set at 30 RPM on NVIDIA NIM and OpenCode Zen deployments, 15 RPM / 250K TPM on Gemini deployments.
+**Rate limits** enforced per-deployment via `enforce_model_rate_limits` — set at 40 RPM on NVIDIA NIM and OpenCode Zen deployments, 15 RPM / 240K TPM on Gemini deployments.
 
 **Load balancing:** LiteLLM default (`simple-shuffle`) distributes requests across deployments per model name.
 
@@ -67,7 +64,7 @@ curl -sN 'http://localhost:4000/v1/messages?beta=true' \
   -H "x-api-key: $LITELLM_MASTER_KEY" \
   -H "anthropic-version: 2023-06-01" \
   -d '{
-    "model": "claude-opus-4-8",
+    "model": "claude-opus-5",
     "max_tokens": 512,
     "stream": true,
     "messages": [{"role": "user", "content": "Hi"}]
@@ -106,7 +103,7 @@ Source of truth for routing and provider settings. Key behaviors:
 
 **`router_settings`:** `enable_weighted_failover: true` (retries within same order tier before escalating), `optional_pre_call_checks: [enforce_model_rate_limits]` — hard-enforces per-deployment RPM/TPM. Fallback chain set via `fallbacks`. Redis connection for distributed rate limiting.
 
-**`additional_drop_params: ["tools[*].strict"]`** — Applied to all Gemini and Agnes deployments. Strips `strict: null` from tool definitions before sending to backends that reject non-boolean values. Fixes 400 validation errors from sglang-based providers.
+**`additional_drop_params: ["tools[*].strict"]`** — Applied to all Gemini deployments. Strips `strict: null` from tool definitions before sending to backends that reject non-boolean values. Fixes 400 validation errors from sglang-based providers.
 
 **`general_settings`:** `master_key` auth, `database_url` for PostgreSQL usage tracking.
 
@@ -120,7 +117,7 @@ curl http://localhost:4000/v1/models
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
-  -d '{"model": "claude-opus-4-8", "messages": [{"role": "user", "content": "Hello!"}], "max_tokens": 100}'
+  -d '{"model": "claude-opus-5", "messages": [{"role": "user", "content": "Hello!"}], "max_tokens": 100}'
 
 # Test haiku (Gemini) with tools (validates additional_drop_params fix)
 curl -X POST http://localhost:4000/v1/chat/completions \
@@ -143,7 +140,7 @@ for i in {1..6}; do
   curl -s -D - http://localhost:4000/v1/chat/completions \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
-    -d '{"model": "claude-opus-4-8", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 10}' | \
+    -d '{"model": "claude-opus-5", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 10}' | \
     grep "x-litellm-model-id:"
 done
 ```
