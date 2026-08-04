@@ -59,10 +59,13 @@ cd litellm-proxy
 cp .env.example .env
 
 # 2. Generate required keys and populate .env
+PG_PASS="$(openssl rand -base64 16)"
+PG_PASS_ENCODED="$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote('$PG_PASS', safe=''))")"
 cat > .env <<EOF
 LITELLM_MASTER_KEY="sk-$(openssl rand -hex 24)"
 LITELLM_SALT_KEY="$(openssl rand -base64 32)"
-POSTGRES_PASSWORD="$(openssl rand -base64 16)"
+POSTGRES_PASSWORD="$PG_PASS"
+POSTGRES_PASSWORD_URL_ENCODED="$PG_PASS_ENCODED"
 REDIS_PASSWORD="$(openssl rand -base64 16)"
 UI_USERNAME=admin
 UI_PASSWORD=changeme123
