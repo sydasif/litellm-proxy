@@ -5,7 +5,6 @@ model_list:
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
       max_parallel_requests: 5
-      order: 1
     rpm: 30
     model_info:
       input_cost_per_token: 0.00000050
@@ -17,7 +16,6 @@ model_list:
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
       max_parallel_requests: 5
-      order: 2
     rpm: 30
     model_info:
       input_cost_per_token: 0.00000050
@@ -25,11 +23,10 @@ model_list:
 
   - model_name: claude-sonnet-5
     litellm_params:
-      model: sensenova/sensenova-6.8-flash-lite
+      model: openai/sensenova-6.8-flash-lite
       api_base: https://token.sensenova.ai/v1
       api_key: os.environ/SENSENOVA_API_KEY
       max_parallel_requests: 5
-      order: 1
     rpm: 30
     model_info:
       input_cost_per_token: 0.00000014
@@ -37,11 +34,10 @@ model_list:
 
   - model_name: claude-sonnet-5
     litellm_params:
-      model: agnes/agnes-2.5-flash
+      model: openai/agnes-2.5-flash
       api_base: https://apihub.agnes-ai.com/v1
       api_key: os.environ/AGNES_API_KEY
       max_parallel_requests: 5
-      order: 2
     rpm: 30
     model_info:
       input_cost_per_token: 0.00000014
@@ -110,8 +106,8 @@ router_settings:
   optional_pre_call_checks:
     - enforce_model_rate_limits
   fallbacks:
-    - claude-opus-5: ["gemini"]
-    - claude-sonnet-5: ["gemini"]
+    - claude-opus-5: ["claude-haiku-4-5-20251001"]
+    - claude-sonnet-5: ["claude-haiku-4-5-20251001"]
     - claude-haiku-4-5-20251001: ["gemini"]
   redis_host: os.environ/REDIS_HOST
   redis_port: os.environ/REDIS_PORT
