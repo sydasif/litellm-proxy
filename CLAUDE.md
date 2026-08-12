@@ -50,6 +50,9 @@ The proxy builds a `litellm-proxy:patched` image (`Dockerfile`) that rewrites ad
 1. **transformation.py** — Reorders block-type detection so `reasoning_content` wins over `content`
 2. **streaming_iterator.py** — Guards against `thinking_delta` landing in a `text` block (sync + async paths)
 3. **streaming_iterator.py** — Adds empty-choices guard to prevent `IndexError: list index out of range` on empty upstream chunks
+4. **streaming_iterator.py** — Peek-first-chunk: opens the initial `content_block` as `thinking`/`text`/`tool_use` to match the first chunk instead of hardcoding an empty `text` block (adapted from upstream PR #33252)
+
+**Upstream tracking:** as of 2026-08-12 the fixes in this patch are **not** merged upstream. Related open PRs: #32664 (guard thinking/signature deltas), #33241 (keep reasoning in thinking block on transitions), #33938 (block/delta type mismatch on combined chunks), #34795 (split combined reasoning+content chunks). When any of these merge, the adapter files change structurally and this patch will print `SKIP` lines at build — re-verify coverage before relying on the image.
 
 **To rebuild after config or base-image changes:**
 
@@ -61,6 +64,7 @@ docker compose build --no-cache litellm && docker compose up -d
 
 ```bash
 curl -sN 'http://localhost:4000/v1/messages?beta=true' \
+  -H "Content-Type: application/json" \
   -H "x-api-key: $LITELLM_MASTER_KEY" \
   -H "anthropic-version: 2023-06-01" \
   -d '{
@@ -71,7 +75,7 @@ curl -sN 'http://localhost:4000/v1/messages?beta=true' \
   }'
 ```
 
-Expected: No `thinking_delta` in text blocks. No empty-choices crashes. Clean streaming.
+Expected: First `content_block_start` opens as `thinking` (not a phantom empty text block), `thinking_delta`s stay in the thinking block, `text_delta`s in the text block. No `thinking_delta` in text blocks. No empty-choices crashes. Clean streaming.
 
 ## Development Commands
 
