@@ -31,7 +31,6 @@ Run from inside the image at build time:
     python3 /app/patches/fix_nemotron_thinking_stream.py
 """
 
-import io
 import os
 import sys
 

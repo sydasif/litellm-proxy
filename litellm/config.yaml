@@ -45,9 +45,10 @@ model_list:
 
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
-      model: nvidia_nim/openai/gpt-oss-120b
+      model: nvidia_nim/poolside/laguna-xs-2.1
       api_key: os.environ/NVIDIA_API_KEY_1
       max_parallel_requests: 5
+      order: 1
     rpm: 40
     model_info:
       input_cost_per_token: 0.00000003
@@ -55,9 +56,10 @@ model_list:
 
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
-      model: nvidia_nim/openai/gpt-oss-120b
+      model: nvidia_nim/poolside/laguna-xs-2.1
       api_key: os.environ/NVIDIA_API_KEY_2
       max_parallel_requests: 5
+      order: 2
     rpm: 40
     model_info:
       input_cost_per_token: 0.00000003
@@ -69,6 +71,7 @@ model_list:
       api_key: os.environ/GEMINI_API_KEY_1
       additional_drop_params: ["tools[*].strict"]
       max_parallel_requests: 5
+      order: 1
     rpm: 15
     tpm: 240000
     model_info:
@@ -81,6 +84,7 @@ model_list:
       api_key: os.environ/GEMINI_API_KEY_2
       additional_drop_params: ["tools[*].strict"]
       max_parallel_requests: 5
+      order: 2
     rpm: 15
     tpm: 240000
     model_info:
@@ -91,19 +95,11 @@ litellm_settings:
   drop_params: true
   use_chat_completions_url_for_anthropic_messages: true
   request_timeout: 120
-  cache: true
-  cache_params:
-    type: local
-    ttl: 600
 
 router_settings:
   enable_weighted_failover: true
   optional_pre_call_checks:
     - enforce_model_rate_limits
-  stream_timeout: 30
-  cooldown_time: 60
-  allowed_fails: 1
-  num_retries: 2
   fallbacks:
     - claude-opus-5: ["claude-haiku-4-5-20251001"]
     - claude-sonnet-5: ["claude-haiku-4-5-20251001"]
