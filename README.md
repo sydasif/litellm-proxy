@@ -18,19 +18,17 @@ A proxy gateway that routes **Claude Code** through **LiteLLM** to multiple AI b
 
 ## Features
 
-- **Multi-provider**: Access NVIDIA NIM, OpenCode Zen, SenseNova, Agnes AI, and Google Gemini through a single endpoint with order-based failover and weighted routing
-- **Load balancing**: `simple-shuffle` distributes requests across multiple model deployments with weighted routing
-- **Order-based failover**: Sonnet slot uses priority tiers — deepseek-v4-flash-free (order 1) → mimo-v2.5-free (order 2) → fallback chain
-- **Rate limiting**: RPM/TPM enforcement via `enforce_model_rate_limits`
+- **Multi-provider**: Access OpenCode Zen, SenseNova, Agnes AI, NVIDIA NIM, and Google Gemini through a single endpoint with weighted routing and per-deployment rate limiting
+- **Load balancing**: `simple-shuffle` distributes requests across multiple model deployments with `enable_weighted_failover: true`
+- **Rate limiting**: Per-deployment RPM/TPM enforcement via `enforce_model_rate_limits`
+- **Cascading fallbacks**: opus/sonnet fall back to haiku; haiku falls back to gemini
 - **Parameter normalization**: Drops unsupported parameters (`drop_params: true`) for cross-provider compatibility
 - **Tool compatibility**: Strips `strict: null` from tool definitions (`additional_drop_params`) for sglang-based backends
-- **Weighted failover**: Retries within same priority tier before escalating across tiers
+- **Weighted failover**: `enable_weighted_failover: true` retries within a model's deployment pool before falling back to the next model
 - **Anthropic compatibility**: Routes all providers via `/v1/chat/completions` for Claude Code integration
-- **Dockerized**: Builds a patched LiteLLM image (`litellm-proxy:patched`) with Nemotron streaming fixes
-- **Redis caching**: Caches repeated prompts for cost savings and latency reduction
-- **PostgreSQL backend**: Persistent storage for virtual keys, budgets, and spend logs
-- **Virtual keys**: Revocable API keys with budgets, rate limits, and model allowlists
-- **Reasoning auto-summary**: Auto-summarizes extended reasoning streams (`reasoning_auto_summary: true`)
+- **Dockerized**: Builds a patched LiteLLM image (`litellm-proxy:patched`) that fixes upstream streaming adapter bugs (think/thinking block routing, empty-choices crash, first-chunk block type)
+- **In-memory caching**: Caches repeated prompts in-process (no external store) for cost savings and latency reduction
+- **Single-instance**: No database or Redis — runs lean for solo use; rate limits and failover are tracked in-process
 - **Health checks**: Liveness (`/health/liveliness`) and readiness (`/health/readiness`) endpoints
 
 ## Architecture
@@ -40,11 +38,21 @@ A proxy gateway that routes **Claude Code** through **LiteLLM** to multiple AI b
 Each claude model maps to **multiple backend deployments** across different providers. LiteLLM's `simple-shuffle` router distributes requests, and `enforce_model_rate_limits` blocks requests before hitting provider limits.
 
 ```bash
-claude-opus-5     → 2 deployments: NVIDIA NIM nemotron-3-ultra (key 1, RPM 40) + NVIDIA NIM nemotron-3-ultra (key 2, RPM 40)
-claude-sonnet-5   → 2 deployments: deepseek-v4-flash-free (order 1, RPM 40) + mimo-v2.5-free (order 2, RPM 40)
-claude-haiku-4-5  → 2 deployments: NVIDIA NIM `gpt-oss-120b` (key 1, RPM 40) + NVIDIA NIM `gpt-oss-120b` (key 2, RPM 40)
-gemini            → 2 deployments: Gemini 3.5-flash-lite (key 1, RPM 15, TPM 240K) + Gemini 3.5-flash-lite (key 2, RPM 15, TPM 240K) — fallback for sonnet/haiku/opus
+claude-opus-5     → 2 deployments: OpenCode Zen deepseek-v4-flash-free + OpenCode Zen mimo-v2.5-free (RPM 30 each)
+claude-sonnet-5   → 2 deployments: SenseNova sensenova-6.8-flash-lite + Agnes agnes-2.5-flash (RPM 30 each)
+claude-haiku-4-5  → 2 deployments: NVIDIA NIM gpt-oss-120b (key 1, RPM 40) + NVIDIA NIM gpt-oss-120b (key 2, RPM 40)
+gemini            → 2 deployments: Gemini 3.5-flash-lite (key 1, RPM 15, TPM 240K) + Gemini 3.5-flash-lite (key 2, RPM 15, TPM 240K)
 ```
+
+**Fallback chain** (when all primary deployments are exhausted):
+
+```bash
+claude-opus-5     → claude-haiku-4-5-20251001
+claude-sonnet-5   → claude-haiku-4-5-20251001
+claude-haiku-4-5  → gemini
+```
+
+Full cascade: `opus/sonnet → haiku (NVIDIA NIM) → gemini`
 
 ## Prerequisites
 
@@ -59,42 +67,39 @@ cd litellm-proxy
 cp .env.example .env
 
 # 2. Generate required keys and populate .env
-PG_PASS="$(openssl rand -base64 16)"
-PG_PASS_ENCODED="$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote('$PG_PASS', safe=''))")"
 cat > .env <<EOF
 LITELLM_MASTER_KEY="sk-$(openssl rand -hex 24)"
 LITELLM_SALT_KEY="$(openssl rand -base64 32)"
-POSTGRES_PASSWORD="$PG_PASS"
-POSTGRES_PASSWORD_URL_ENCODED="$PG_PASS_ENCODED"
-REDIS_PASSWORD="$(openssl rand -base64 16)"
 UI_USERNAME=admin
 UI_PASSWORD=changeme123
 EOF
 
 # 3. Add YOUR provider API keys to .env (edit the file)
-# Required: NVIDIA_API_KEY_1, NVIDIA_API_KEY_2, OPENCODE_API_KEY
+# Required: OPENCODE_API_KEY, SENSENOVA_API_KEY, AGNES_API_KEY,
+#           NVIDIA_API_KEY_1, NVIDIA_API_KEY_2,
+#           GEMINI_API_KEY_1, GEMINI_API_KEY_2
 
-# 5. Start the proxy stack
+# 4. Start the proxy stack
 docker compose up -d
 
-# 6. Verify
+# 5. Verify
 curl http://localhost:4000/health/liveliness   # "I'm alive!"
-curl http://localhost:4000/health/readiness   # {"status":"healthy","db":"connected"}
+curl http://localhost:4000/health/readiness   # {"status":"healthy"}
 
-# 7. Create a virtual key (use for apps, NOT master key)
+# 6. Create a virtual key (use for apps, NOT master key)
 VKEY=$(curl -s -X POST http://localhost:4000/key/generate \
   -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
   -H "Content-Type: application/json" \
   -d '{"models": ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"], "max_budget": 50, "budget_duration": "30d", "rpm_limit": 30}' | jq -r .key)
 
-# 8. Test with virtual key
+# 7. Test with virtual key
 curl -H "Authorization: Bearer $VKEY" http://localhost:4000/v1/models
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer $VKEY" \
   -H "Content-Type: application/json" \
   -d '{"model": "claude-opus-5", "messages": [{"role": "user", "content": "Hello!"}], "max_tokens": 50}'
 
-# 9. Open Admin UI
+# 8. Open Admin UI
 # http://localhost:4000/ui  (user: admin, pass: changeme123)
 ```
 
@@ -147,41 +152,40 @@ curl -X POST http://localhost:4000/key/delete \
   -H "Content-Type: application/json" \
   -d '{"key": "<VIRTUAL_KEY>"}'
 
-# Spend report
-curl -H "Authorization: Bearer <MASTER_KEY>" "http://localhost:4000/global/spend/report"
+# Spend report (requires a database backend — not available in this DB-less solo setup)
+# curl -H "Authorization: Bearer <MASTER_KEY>" "http://localhost:4000/global/spend/report"
 ```
+
+> **Note:** Virtual keys, budgets, teams, and spend reports require a database. In this
+> single-instance setup they are in-memory only (non-persistent across restarts) or
+> unavailable. The master key is sufficient for solo use.
 
 ### Admin UI
 
 Open `http://localhost:4000/ui` in your browser (basic auth: `admin` / `changeme123` by default).
 
-Features:
+Features (note: spend, teams, and budgets require a database, which this solo setup omits):
 
-- **Dashboard**: Overview of spend, requests, latency
-- **Virtual Keys**: Create, revoke, view usage per key
-- **Teams**: Organize keys by team with shared budgets
+- **Virtual Keys**: Create, revoke, view usage per key (in-memory, non-persistent)
 - **Models**: View registered models and their status
 - **Logs**: Search request logs with filters
-- **Spend Reports**: Per-team, per-model cost breakdown
 
 ### Available Models
 
-| Alias                       | Backend                                                               | Order | RPM/TPM      |
-| --------------------------- | --------------------------------------------------------------------- | ----- | ------------ |
-| `claude-opus-5`             | NVIDIA Nemotron 3 Ultra 550B (key 1 + key 2)                          | —     | 40/— each    |
-| `claude-sonnet-5`           | OpenCode Zen deepseek-v4-flash-free (order 1) + mimo-v2.5-free (order 2) | 1, 2  | 40/— each    |
-| `claude-haiku-4-5-20251001` | NVIDIA NIM `gpt-oss-120b` (key 1, RPM 40) + NVIDIA NIM `gpt-oss-120b` (key 2, RPM 40)             | 1, 2  | 40/— each    |
-| `gemini`                    | Gemini 3.5-flash-lite (key 1 + key 2) — fallback for opus/sonnet/haiku | —     | 15/240K each |
+| Alias                       | Backend                                                               | RPM/TPM      |
+| --------------------------- | --------------------------------------------------------------------- | ------------ |
+| `claude-opus-5`             | OpenCode Zen deepseek-v4-flash-free + mimo-v2.5-free                  | 30 each      |
+| `claude-sonnet-5`           | SenseNova sensenova-6.8-flash-lite + Agnes agnes-2.5-flash             | 30 each      |
+| `claude-haiku-4-5-20251001` | NVIDIA NIM gpt-oss-120b (key 1) + NVIDIA NIM gpt-oss-120b (key 2)     | 40 each      |
+| `gemini`                    | Gemini 3.5-flash-lite (key 1) + Gemini 3.5-flash-lite (key 2)         | 15 / 240K each |
 
-**Haiku failover cascade:** `SenseNova (order 1) → Agnes (order 2) → (fallback) gemini-3.5-flash-lite key1 → key2`
-
-**Sonnet failover cascade:** `deepseek-v4-flash-free (order 1) → mimo-v2.5-free (order 2) → gemini`
+**Fallback cascade:** opus → haiku → gemini · sonnet → haiku → gemini
 
 ## Project Structure
 
 ```bash
 litellm-proxy/
-├── docker-compose.yml          # Docker Compose (LiteLLM + Postgres + Redis)
+├── docker-compose.yml          # Docker Compose (LiteLLM, single instance — no DB/Redis)
 ├── Dockerfile                  # Builds litellm-proxy:patched from official image
 ├── patches/
 │   └── fix_nemotron_thinking_stream.py  # Patches LiteLLM SSE streaming bug
@@ -196,11 +200,9 @@ litellm-proxy/
 
 ## Services
 
-| Service    | Port | Description                       |
-| ---------- | ---- | --------------------------------- |
-| LiteLLM    | 4000 | Main proxy API, Admin UI          |
-| PostgreSQL | 5432 | Virtual keys, spend logs, budgets |
-| Redis      | 6379 | Response caching, rate limiting   |
+| Service | Port | Description                                         |
+| ------- | ---- | --------------------------------------------------- |
+| LiteLLM | 4000 | Main proxy API, Admin UI (single instance, in-memory) |
 
 ## Maintenance
 

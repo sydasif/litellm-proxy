@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, Google Gemini) with load balancing, rate limiting, and order-based failover. Uses Docker Compose to deploy a patched LiteLLM image that fixes Nemotron thinking-stream and empty-choices streaming bugs.
+AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, SenseNova, Agnes AI, Google Gemini) with load balancing, rate limiting, and weighted failover. Runs as a single instance with in-memory state (no Postgres/Redis). Uses Docker Compose to deploy a patched LiteLLM image that fixes Nemotron thinking-stream and empty-choices streaming bugs.
 
 ## Architecture
 
@@ -12,36 +12,26 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 
 **Backend deployments:**
 
-| Virtual Model               | Deployment 1                                                     | Deployment 2                                                | Deployment 3 | Deployment 4 |
-| --------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------- | ------------ | ------------ |
-| `claude-opus-5`             | `openai/deepseek-v4-flash-free` (OpenCode Zen, RPM 30)                        | `openai/mimo-v2.5-free` (OpenCode Zen, RPM 30)                   | —            | —            |
-| `claude-sonnet-5`           | `sensenova/sensenova-6.8-flash-lite` (RPM 25, order 1)  | `agnes/agnes-2.5-flash` (RPM 25, order 2)     | —            | —            |
-| `claude-haiku-4-5-20251001` | `sensenova/sensenova-6.8-flash-lite` (RPM 25, order 1)           | `agnes/agnes-2.5-flash` (RPM 25, order 2)                   | —            | —            |
-| `gemini`                    | `gemini/gemini-3.5-flash-lite` (key 1, RPM 15, TPM 240K)         | `gemini/gemini-3.5-flash-lite` (key 2, RPM 15, TPM 240K)    | —            | —            |
+| Virtual Model               | Deployment 1                                          | Deployment 2                                         | Deployment 3 | Deployment 4 |
+| --------------------------- | ----------------------------------------------------- | ---------------------------------------------------- | ------------ | ------------ |
+| `claude-opus-5`             | `openai/deepseek-v4-flash-free` (OpenCode Zen, RPM 30) | `openai/mimo-v2.5-free` (OpenCode Zen, RPM 30)       | —            | —            |
+| `claude-sonnet-5`           | `openai/sensenova-6.8-flash-lite` (RPM 30)             | `openai/agnes-2.5-flash` (RPM 30)                    | —            | —            |
+| `claude-haiku-4-5-20251001` | `nvidia_nim/openai/gpt-oss-120b` (key 1, RPM 40)       | `nvidia_nim/openai/gpt-oss-120b` (key 2, RPM 40)     | —            | —            |
+| `gemini`                    | `gemini/gemini-3.5-flash-lite` (key 1, RPM 15, TPM 240K) | `gemini/gemini-3.5-flash-lite` (key 2, RPM 15, TPM 240K) | —      | —            |
 
 **Fallback chain (when all primary deployments are exhausted):**
 
-| Model                       | Fallback to |
-| --------------------------- | ----------- |
-| `claude-opus-5`             | `gemini`    |
-| `claude-sonnet-5`           | `gemini`    |
-| `claude-haiku-4-5-20251001` | `gemini`    |
+| Model                       | Fallback to                  |
+| --------------------------- | ---------------------------- |
+| `claude-opus-5`             | `claude-haiku-4-5-20251001`  |
+| `claude-sonnet-5`           | `claude-haiku-4-5-20251001`  |
+| `claude-haiku-4-5-20251001` | `gemini`                     |
 
-**Haiku failover:** `claude-haiku-4-5-20251001` maps to two NVIDIA NIM `gpt-oss-120b` deployments (order 1 & 2) with RPM 40 each. When both are exhausted or fail, `router_settings.fallbacks` routes to the separate `gemini` model (`gemini-3.5-flash-lite`, 2 deployments).
+**Full failover cascade:** `opus/sonnet → haiku (NVIDIA NIM) → gemini`
 
-**Haiku full failover cascade:** `SenseNova → Agnes → (fallback) gemini-3.5-flash-lite key1 → key2`
+**Rate limits** enforced per-deployment via `enforce_model_rate_limits` — 30 RPM on OpenCode Zen (opus) and SenseNova/Agnes (sonnet) deployments, 40 RPM on NVIDIA NIM (haiku) deployments, 15 RPM / 240K TPM on Gemini deployments.
 
-**Sonnet order-based failover:** Within the sonnet slot, deployments are prioritized by `order`:
-
-- `order: 1` → `deepseek-v4-flash-free` (primary)
-- `order: 2` → `mimo-v2.5-free` (secondary)
-- Router exhausts all order-1 deployments before escalating to order-2
-- When both are exhausted, `router_settings.fallbacks` routes to the `gemini` model
-- Sonnet full cascade: `deepseek-v4-flash-free → mimo-v2.5-free → gemini`
-
-**Rate limits** enforced per-deployment via `enforce_model_rate_limits` — set at 40 RPM on NVIDIA NIM and OpenCode Zen deployments, 25 RPM on SenseNova/Agnes deployments, 15 RPM / 240K TPM on Gemini deployments.
-
-**Load balancing:** LiteLLM default (`simple-shuffle`) distributes requests across deployments per model name.
+**Load balancing:** LiteLLM default (`simple-shuffle`) distributes requests across deployments per model name. `enable_weighted_failover: true` retries within a model's deployment pool before escalating to the fallback model.
 
 ## Patched Image (Nemotron thinking-stream + empty-choices fix)
 
@@ -103,13 +93,13 @@ python -c "import yaml; yaml.safe_load(open('litellm/config.yaml'))"
 
 Source of truth for routing and provider settings. Key behaviors:
 
-**`litellm_settings`:** `drop_params: true`, `use_chat_completions_url_for_anthropic_messages: true`, `reasoning_auto_summary: true`, `request_timeout: 120`, Redis-backed `cache: true` (600s TTL, 100 max connections)
+**`litellm_settings`:** `drop_params: true`, `use_chat_completions_url_for_anthropic_messages: true`, `request_timeout: 120`, in-memory `cache: true` (local, 600s TTL). No Redis.
 
-**`router_settings`:** `enable_weighted_failover: true` (retries within same order tier before escalating), `optional_pre_call_checks: [enforce_model_rate_limits]` — hard-enforces per-deployment RPM/TPM. Fallback chain set via `fallbacks`. Redis connection for distributed rate limiting.
+**`router_settings`:** `enable_weighted_failover: true` (retries within the same model's deployment pool before escalating), `optional_pre_call_checks: [enforce_model_rate_limits]` — hard-enforces per-deployment RPM/TPM (tracked in-process for single instance). `stream_timeout: 30`, `cooldown_time: 60`, `allowed_fails: 1`, `num_retries: 2` — fail a stalled/slow upstream fast instead of hanging up to `request_timeout`. Fallback chain set via `fallbacks`. No Redis.
 
 **`additional_drop_params: ["tools[*].strict"]`** — Applied to all Gemini deployments. Strips `strict: null` from tool definitions before sending to backends that reject non-boolean values. Fixes 400 validation errors from sglang-based providers.
 
-**`general_settings`:** `master_key` auth, `database_url` for PostgreSQL usage tracking.
+**`general_settings`:** `master_key` auth. No `database_url` — single-instance, no PostgreSQL. Virtual keys/budgets/spend reports are in-memory only.
 
 ## Testing
 

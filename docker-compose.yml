@@ -12,15 +12,10 @@ services:
     env_file:
       - ./.env
     environment:
-      DATABASE_URL: "postgresql://litellm:${POSTGRES_PASSWORD_URL_ENCODED}@db:5432/litellm"
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: "${REDIS_PASSWORD}"
       LITELLM_MASTER_KEY: "${LITELLM_MASTER_KEY}"
       LITELLM_SALT_KEY: "${LITELLM_SALT_KEY}"
       UI_USERNAME: "${UI_USERNAME}"
       UI_PASSWORD: "${UI_PASSWORD}"
-      STORE_MODEL_IN_DB: "true"
     command:
       [
         "--config",
@@ -39,11 +34,6 @@ services:
     mem_limit: 2g
     stop_grace_period: 1m
     restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "python3", "-c", "import requests; requests.get('http://localhost:4000/health/liveliness')"]
       interval: 60s
@@ -51,56 +41,6 @@ services:
       retries: 2
       start_period: 70s
 
-  db:
-    image: postgres:16-alpine
-    container_name: litellm_db
-    restart: always
-    environment:
-      POSTGRES_DB: litellm
-      POSTGRES_USER: litellm
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    mem_limit: 512m
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 30s
-
-  redis:
-    image: redis:7-alpine
-    container_name: litellm_redis
-    restart: always
-    command:
-      [
-        "redis-server",
-        "--requirepass",
-        "${REDIS_PASSWORD}",
-        "--maxmemory",
-        "256mb",
-        "--maxmemory-policy",
-        "allkeys-lru",
-      ]
-    volumes:
-      - redis_data:/data
-    mem_limit: 256m
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          'redis-cli -h localhost -a "$REDIS_PASSWORD" ping | grep -q PONG',
-        ]
-      interval: 5s
-      timeout: 3s
-      retries: 3
-      start_period: 20s
-
 networks:
   default:
     name: litellm-proxy-net
-
-volumes:
-  postgres_data:
-  redis_data:
