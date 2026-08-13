@@ -49,7 +49,7 @@ gemini            → 2 deployments: Gemini 3.5-flash-lite (key 1, RPM 15, TPM 2
 ```bash
 claude-opus-5     → claude-haiku-4-5-20251001
 claude-sonnet-5   → claude-haiku-4-5-20251001
-claude-haiku-4-5  → gemini
+claude-haiku-4-5  → gemini-3.5
 ```
 
 Full cascade: `opus/sonnet → haiku (NVIDIA NIM) → gemini`
@@ -69,9 +69,6 @@ cp .env.example .env
 # 2. Generate required keys and populate .env
 cat > .env <<EOF
 LITELLM_MASTER_KEY="sk-$(openssl rand -hex 24)"
-LITELLM_SALT_KEY="$(openssl rand -base64 32)"
-UI_USERNAME=admin
-UI_PASSWORD=changeme123
 EOF
 
 # 3. Add YOUR provider API keys to .env (edit the file)
@@ -175,9 +172,9 @@ Features (note: spend, teams, and budgets require a database, which this solo se
 | Alias                       | Backend                                                               | RPM/TPM      |
 | --------------------------- | --------------------------------------------------------------------- | ------------ |
 | `claude-opus-5`             | OpenCode Zen deepseek-v4-flash-free + mimo-v2.5-free                  | 30 each      |
-| `claude-sonnet-5`           | SenseNova sensenova-6.8-flash-lite + Agnes agnes-2.5-flash             | 30 each      |
+| `claude-sonnet-5`           | SenseNova sensenova-6.8-flash-lite + Agnes agnes-2.5-flash            | 30 each      |
 | `claude-haiku-4-5-20251001` | NVIDIA NIM gpt-oss-120b (key 1) + NVIDIA NIM gpt-oss-120b (key 2)     | 40 each      |
-| `gemini`                    | Gemini 3.5-flash-lite (key 1) + Gemini 3.5-flash-lite (key 2)         | 15 / 240K each |
+| `gemini-3.5`                | Gemini 3.5-flash-lite (key 1) + Gemini 3.5-flash-lite (key 2)         | 15           |
 
 **Fallback cascade:** opus → haiku → gemini · sonnet → haiku → gemini
 

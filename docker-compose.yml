@@ -13,30 +13,20 @@ services:
       - ./.env
     environment:
       LITELLM_MASTER_KEY: "${LITELLM_MASTER_KEY}"
-      LITELLM_SALT_KEY: "${LITELLM_SALT_KEY}"
-      UI_USERNAME: "${UI_USERNAME}"
-      UI_PASSWORD: "${UI_PASSWORD}"
     command:
       [
         "--config",
         "/app/config.yaml",
         "--port",
         "4000",
-        "--num_workers",
-        "2",
-        "--run_gunicorn",
-        "--max_requests_before_restart",
-        "10000",
-        "--max_requests_before_restart_jitter",
-        "1000",
       ]
     cpus: 2.0
-    mem_limit: 2g
+    mem_limit: 4g
     stop_grace_period: 1m
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python3", "-c", "import requests; requests.get('http://localhost:4000/health/liveliness')"]
-      interval: 60s
+      interval: 90s
       timeout: 10s
       retries: 2
       start_period: 70s
