@@ -16,7 +16,7 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 | --------------------------- | ----------------------------------------------------- | ---------------------------------------------------- | ------------ | ------------ |
 | `claude-opus-5`             | `openai/deepseek-v4-flash-free` (OpenCode Zen, RPM 30) | `openai/mimo-v2.5-free` (OpenCode Zen, RPM 30)       | —            | —            |
 | `claude-sonnet-5`           | `openai/sensenova-6.8-flash-lite` (RPM 30)             | `openai/agnes-2.5-flash` (RPM 30)                    | —            | —            |
-| `claude-haiku-4-5-20251001` | `nvidia_nim/openai/gpt-oss-120b` (key 1, RPM 40)       | `nvidia_nim/openai/gpt-oss-120b` (key 2, RPM 40)     | —            | —            |
+| `claude-haiku-4-5-20251001` | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 1, RPM 40) | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 2, RPM 40) | — | — |
 | `gemini`                    | `gemini/gemini-3.5-flash-lite` (key 1, RPM 15, TPM 240K) | `gemini/gemini-3.5-flash-lite` (key 2, RPM 15, TPM 240K) | —      | —            |
 
 **Fallback chain (when all primary deployments are exhausted):**
