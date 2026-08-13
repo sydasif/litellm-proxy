@@ -12,24 +12,24 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 
 **Backend deployments:**
 
-| Virtual Model               | Deployment 1                                                     | Deployment 2                                                      | Deployment 3 | Deployment 4 |
-| --------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------- | ------------ | ------------ |
-| `claude-opus-5`             | `nvidia_nim/…nemotron-3…` (key 1, RPM 40)                        | `nvidia_nim/…nemotron-3…` (key 2, RPM 40)                         | —            | —            |
-| `claude-sonnet-5`           | `openai/deepseek-v4-flash-free` (OpenCode Zen, RPM 40, order 1)  | `openai/mimo-v2.5-free` (OpenCode Zen, RPM 40, order 2)           | —            | —            |
-| `claude-haiku-4-5-20251001` | `gemini-3.5-flash-lite` (key 1, RPM 15, TPM 240K)                | `gemini-3.5-flash-lite` (key 2, RPM 15, TPM 240K)                 | —            | —            |
-| `gemini`                    | `gemini-3.1-flash-lite` (key 1, RPM 15, TPM 240K)                | `gemini-3.1-flash-lite` (key 2, RPM 15, TPM 240K)                 | —            | —            |
+| Virtual Model               | Deployment 1                                                     | Deployment 2                                                | Deployment 3 | Deployment 4 |
+| --------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------- | ------------ | ------------ |
+| `claude-opus-5`             | `openai/deepseek-v4-flash-free` (OpenCode Zen, RPM 30)                        | `openai/mimo-v2.5-free` (OpenCode Zen, RPM 30)                   | —            | —            |
+| `claude-sonnet-5`           | `sensenova/sensenova-6.8-flash-lite` (RPM 25, order 1)  | `agnes/agnes-2.5-flash` (RPM 25, order 2)     | —            | —            |
+| `claude-haiku-4-5-20251001` | `sensenova/sensenova-6.8-flash-lite` (RPM 25, order 1)           | `agnes/agnes-2.5-flash` (RPM 25, order 2)                   | —            | —            |
+| `gemini`                    | `gemini/gemini-3.5-flash-lite` (key 1, RPM 15, TPM 240K)         | `gemini/gemini-3.5-flash-lite` (key 2, RPM 15, TPM 240K)    | —            | —            |
 
 **Fallback chain (when all primary deployments are exhausted):**
 
 | Model                       | Fallback to |
 | --------------------------- | ----------- |
-| `claude-opus-5`             | (none)      |
+| `claude-opus-5`             | `gemini`    |
 | `claude-sonnet-5`           | `gemini`    |
 | `claude-haiku-4-5-20251001` | `gemini`    |
 
-**Haiku failover:** `claude-haiku-4-5-20251001` maps to two `gemini-3.5-flash-lite` deployments that LiteLLM load-balances via `simple-shuffle`. When both are exhausted or fail, `router_settings.fallbacks` routes to the separate `gemini` model (`gemini-3.1-flash-lite`, 2 deployments).
+**Haiku failover:** `claude-haiku-4-5-20251001` maps to two NVIDIA NIM `gpt-oss-120b` deployments (order 1 & 2) with RPM 40 each. When both are exhausted or fail, `router_settings.fallbacks` routes to the separate `gemini` model (`gemini-3.5-flash-lite`, 2 deployments).
 
-**Haiku full failover cascade:** `3.5 KEY_1 → 3.5 KEY_2 → (fallback) 3.1 KEY_1 → 3.1 KEY_2`
+**Haiku full failover cascade:** `SenseNova → Agnes → (fallback) gemini-3.5-flash-lite key1 → key2`
 
 **Sonnet order-based failover:** Within the sonnet slot, deployments are prioritized by `order`:
 
@@ -39,7 +39,7 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 - When both are exhausted, `router_settings.fallbacks` routes to the `gemini` model
 - Sonnet full cascade: `deepseek-v4-flash-free → mimo-v2.5-free → gemini`
 
-**Rate limits** enforced per-deployment via `enforce_model_rate_limits` — set at 40 RPM on NVIDIA NIM and OpenCode Zen deployments, 15 RPM / 240K TPM on Gemini deployments.
+**Rate limits** enforced per-deployment via `enforce_model_rate_limits` — set at 40 RPM on NVIDIA NIM and OpenCode Zen deployments, 25 RPM on SenseNova/Agnes deployments, 15 RPM / 240K TPM on Gemini deployments.
 
 **Load balancing:** LiteLLM default (`simple-shuffle`) distributes requests across deployments per model name.
 
@@ -123,7 +123,7 @@ curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
   -d '{"model": "claude-opus-5", "messages": [{"role": "user", "content": "Hello!"}], "max_tokens": 100}'
 
-# Test haiku (Gemini) with tools (validates additional_drop_params fix)
+# Test haiku (SenseNova/Agnes) with tools (validates additional_drop_params fix)
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
@@ -154,5 +154,4 @@ done
 - **Update API keys**: Edit `.env` file
 - **Modify routing/providers**: Update `litellm/config.yaml`, then restart
 - **Rebuild patched image**: `docker compose build --no-cache litellm && docker compose up -d` (after config or base-image change)
-- **Update LiteLLM base image**: Bump tag in `Dockerfile`, rebuild, re-verify the patch applies
 - **Monitor logs**: `docker compose logs -f`

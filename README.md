@@ -14,11 +14,11 @@
   <a href="https://docs.docker.com/compose/"><img src="https://img.shields.io/badge/docker%20compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Compose"></a>
 </p>
 
-A proxy gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, Google Gemini) with load balancing and rate limiting.
+A proxy gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, SenseNova, Agnes AI, Google Gemini) with load balancing and rate limiting.
 
 ## Features
 
-- **Multi-provider**: Access NVIDIA NIM, OpenCode Zen, and Google Gemini through a single endpoint
+- **Multi-provider**: Access NVIDIA NIM, OpenCode Zen, SenseNova, Agnes AI, and Google Gemini through a single endpoint with order-based failover and weighted routing
 - **Load balancing**: `simple-shuffle` distributes requests across multiple model deployments with weighted routing
 - **Order-based failover**: Sonnet slot uses priority tiers — deepseek-v4-flash-free (order 1) → mimo-v2.5-free (order 2) → fallback chain
 - **Rate limiting**: RPM/TPM enforcement via `enforce_model_rate_limits`
@@ -42,8 +42,8 @@ Each claude model maps to **multiple backend deployments** across different prov
 ```bash
 claude-opus-5     → 2 deployments: NVIDIA NIM nemotron-3-ultra (key 1, RPM 40) + NVIDIA NIM nemotron-3-ultra (key 2, RPM 40)
 claude-sonnet-5   → 2 deployments: deepseek-v4-flash-free (order 1, RPM 40) + mimo-v2.5-free (order 2, RPM 40)
-claude-haiku-4-5  → 2 deployments: Gemini 3.5-flash-lite (key 1, RPM 15, TPM 240K) + Gemini 3.5-flash-lite (key 2, RPM 15, TPM 240K)
-gemini            → 2 deployments: Gemini 3.1-flash-lite (key 1, RPM 15, TPM 240K) + Gemini 3.1-flash-lite (key 2, RPM 15, TPM 240K) — fallback for sonnet/haiku
+claude-haiku-4-5  → 2 deployments: NVIDIA NIM `gpt-oss-120b` (key 1, RPM 40) + NVIDIA NIM `gpt-oss-120b` (key 2, RPM 40)
+gemini            → 2 deployments: Gemini 3.5-flash-lite (key 1, RPM 15, TPM 240K) + Gemini 3.5-flash-lite (key 2, RPM 15, TPM 240K) — fallback for sonnet/haiku/opus
 ```
 
 ## Prerequisites
@@ -170,10 +170,10 @@ Features:
 | --------------------------- | --------------------------------------------------------------------- | ----- | ------------ |
 | `claude-opus-5`             | NVIDIA Nemotron 3 Ultra 550B (key 1 + key 2)                          | —     | 40/— each    |
 | `claude-sonnet-5`           | OpenCode Zen deepseek-v4-flash-free (order 1) + mimo-v2.5-free (order 2) | 1, 2  | 40/— each    |
-| `claude-haiku-4-5-20251001` | Gemini 3.5-flash-lite (key 1 + key 2)                                 | —     | 15/240K each |
-| `gemini`                    | Gemini 3.1-flash-lite (key 1 + key 2) — fallback for sonnet/haiku     | —     | 15/240K each |
+| `claude-haiku-4-5-20251001` | NVIDIA NIM `gpt-oss-120b` (key 1, RPM 40) + NVIDIA NIM `gpt-oss-120b` (key 2, RPM 40)             | 1, 2  | 40/— each    |
+| `gemini`                    | Gemini 3.5-flash-lite (key 1 + key 2) — fallback for opus/sonnet/haiku | —     | 15/240K each |
 
-**Haiku failover cascade:** `3.5 KEY_1 → 3.5 KEY_2 → (fallback) 3.1 KEY_1 → 3.1 KEY_2`
+**Haiku failover cascade:** `SenseNova (order 1) → Agnes (order 2) → (fallback) gemini-3.5-flash-lite key1 → key2`
 
 **Sonnet failover cascade:** `deepseek-v4-flash-free (order 1) → mimo-v2.5-free (order 2) → gemini`
 
