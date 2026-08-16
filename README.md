@@ -32,7 +32,6 @@ An AI Proxy Gateway that routes **Claude Code** and other clients through **Lite
 - **Weighted Failover**: Retries within a model's deployment pool before escalating to fallback models.
 - **Anthropic Compatibility**: Routes client requests seamlessly via `/v1/chat/completions` and `/v1/messages`.
 - **Patched Streaming Image**: Builds a custom LiteLLM image (`litellm-proxy:patched`) fixing upstream thinking-stream adapter bugs and empty-choices crashes.
-- **In-Memory Caching**: Caches repeated prompts in-process (600s TTL) for latency reduction.
 - **Single-Instance Design**: No external database, Redis, or UI required — runs entirely via API.
 - **Health Checks**: Liveness (`/health/liveliness`) and readiness (`/health/readiness`) endpoints.
 

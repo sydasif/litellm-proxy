@@ -17,7 +17,7 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 | `claude-opus-5`             | `openai/deepseek-v4-flash-free` (OpenCode Zen, RPM 30) | `openai/mimo-v2.5-free` (OpenCode Zen, RPM 30)       | —            | —            |
 | `claude-sonnet-5`           | `openai/sensenova-6.8-flash-lite` (RPM 30)             | `openai/agnes-2.5-flash` (RPM 30)                    | —            | —            |
 | `claude-haiku-4-5-20251001` | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 1, RPM 40) | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 2, RPM 40) | — | — |
-| `gemini`                    | `gemini/gemini-3.5-flash-lite` (key 1, RPM 15, TPM 240K) | `gemini/gemini-3.5-flash-lite` (key 2, RPM 15, TPM 240K) | —      | —            |
+| `gemini-3.5`                | `gemini/gemini-3.5-flash-lite` (key 1, RPM 15, TPM 240K) | `gemini/gemini-3.5-flash-lite` (key 2, RPM 15, TPM 240K) | —      | —            |
 
 **Fallback chain (when all primary deployments are exhausted):**
 
@@ -25,7 +25,7 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 | --------------------------- | ---------------------------- |
 | `claude-opus-5`             | `claude-haiku-4-5-20251001`  |
 | `claude-sonnet-5`           | `claude-haiku-4-5-20251001`  |
-| `claude-haiku-4-5-20251001` | `gemini`                     |
+| `claude-haiku-4-5-20251001` | `gemini-3.5`                     |
 
 **Full failover cascade:** `opus/sonnet → haiku (NVIDIA NIM) → gemini`
 
@@ -93,9 +93,9 @@ python -c "import yaml; yaml.safe_load(open('litellm/config.yaml'))"
 
 Source of truth for routing and provider settings. Key behaviors:
 
-**`litellm_settings`:** `drop_params: true`, `use_chat_completions_url_for_anthropic_messages: true`, `request_timeout: 120`, in-memory `cache: true` (local, 600s TTL). No Redis.
+**`litellm_settings`:** `drop_params: true`, `use_chat_completions_url_for_anthropic_messages: true`, `request_timeout: 120`. No Redis.
 
-**`router_settings`:** `enable_weighted_failover: true` (retries within the same model's deployment pool before escalating), `optional_pre_call_checks: [enforce_model_rate_limits]` — hard-enforces per-deployment RPM/TPM (tracked in-process for single instance). `stream_timeout: 30`, `cooldown_time: 60`, `allowed_fails: 1`, `num_retries: 2` — fail a stalled/slow upstream fast instead of hanging up to `request_timeout`. Fallback chain set via `fallbacks`. No Redis.
+**`router_settings`:** `enable_weighted_failover: true` (retries within the same model's deployment pool before escalating), `optional_pre_call_checks: [enforce_model_rate_limits]` — hard-enforces per-deployment RPM/TPM (tracked in-process for single instance). Fallback chain set via `fallbacks`. No Redis.
 
 **`additional_drop_params: ["tools[*].strict"]`** — Applied to all Gemini deployments. Strips `strict: null` from tool definitions before sending to backends that reject non-boolean values. Fixes 400 validation errors from sglang-based providers.
 
