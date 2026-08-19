@@ -41,7 +41,7 @@ An AI Proxy Gateway that routes **Claude Code** and other clients through **Lite
 
 | Virtual Model Alias | Backend Deployments | Rate Limits |
 | :--- | :--- | :--- |
-| `claude-opus-5` | • `openai/deepseek-v4-flash-free` (OpenCode Zen)<br>• `openai/mimo-v2.5-free` (OpenCode Zen) | 30 RPM per deployment |
+| `claude-opus-5` | • `openai/deepseek-v4-flash-free` (OpenCode Zen)<br>• `openai/hy3-free` (OpenCode Zen) | 30 RPM per deployment |
 | `claude-sonnet-5` | • `openai/sensenova-6.8-flash-lite` (SenseNova)<br>• `openai/agnes-2.5-flash` (Agnes AI) | 30 RPM per deployment |
 | `claude-haiku-4-5-20251001` | • `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (Key 1)<br>• `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (Key 2) | 40 RPM per deployment |
 | `gemini-3.5` | • `gemini/gemini-3.5-flash-lite` (Key 1)<br>• `gemini/gemini-3.5-flash-lite` (Key 2) | 15 RPM, 240K TPM per deployment |
