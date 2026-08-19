@@ -14,7 +14,7 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 
 | Virtual Model               | Deployment 1                                          | Deployment 2                                         | Deployment 3 | Deployment 4 |
 | --------------------------- | ----------------------------------------------------- | ---------------------------------------------------- | ------------ | ------------ |
-| `claude-opus-5`             | `openai/deepseek-v4-flash-free` (OpenCode Zen, RPM 30) | `openai/mimo-v2.5-free` (OpenCode Zen, RPM 30)       | —            | —            |
+| `claude-opus-5`             | `openai/deepseek-v4-flash-free` (OpenCode Zen, RPM 30) | `openai/hy3-free` (OpenCode Zen, RPM 30)       | —            | —            |
 | `claude-sonnet-5`           | `openai/sensenova-6.8-flash-lite` (RPM 30)             | `openai/agnes-2.5-flash` (RPM 30)                    | —            | —            |
 | `claude-haiku-4-5-20251001` | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 1, RPM 40) | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 2, RPM 40) | — | — |
 | `gemini-3.5`                | `gemini/gemini-3.5-flash-lite` (key 1, RPM 15, TPM 240K) | `gemini/gemini-3.5-flash-lite` (key 2, RPM 15, TPM 240K) | —      | —            |
@@ -43,6 +43,8 @@ The proxy builds a `litellm-proxy:patched` image (`Dockerfile`) that rewrites ad
 4. **streaming_iterator.py** — Peek-first-chunk: opens the initial `content_block` as `thinking`/`text`/`tool_use` to match the first chunk instead of hardcoding an empty `text` block (adapted from upstream PR #33252)
 
 **Upstream tracking:** as of 2026-08-12 the fixes in this patch are **not** merged upstream. Related open PRs: #32664 (guard thinking/signature deltas), #33241 (keep reasoning in thinking block on transitions), #33938 (block/delta type mismatch on combined chunks), #34795 (split combined reasoning+content chunks). When any of these merge, the adapter files change structurally and this patch will print `SKIP` lines at build — re-verify coverage before relying on the image.
+
+**Validated 2026-08-19 (browser):** re-confirmed against the pinned `litellm==1.92.0` adapter sources (raw `streaming_iterator.py` and `transformation.py`) and the live PR pages. All four patch functions apply with no `SKIP` against v1.92.0 — every byte-exact anchor (`sent_content_block_start` text-block open in both `__next__`/`__anext__`, the `# Reset state for new block` async transition, the `chunk.choices[0].finish_reason` empty-choices guard, the `reasoning_content`-before-`content` reorder) is present. PR #33252 still shows `Status: Open`, so the local patch remains required. Note: upstream #33252 targets `litellm_internal_staging` and assumes helpers (`_delta_has_content`, `_restore_tool_name_mapping`) that do not exist in 1.92.0 — this patch inlines those, so it is the correct adaptation for the pinned base image and is already hardened against the tool-name regression upstream reviewers flagged.
 
 **To rebuild after config or base-image changes:**
 
