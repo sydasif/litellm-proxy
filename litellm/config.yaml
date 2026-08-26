@@ -1,103 +1,64 @@
 model_list:
   - model_name: claude-opus-5
     litellm_params:
-      model: openai/deepseek-v4-flash-free
+      model: openai/x-preview-f-free
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
-      max_parallel_requests: 5
-    rpm: 30
-    model_info:
-      input_cost_per_token: 0.00000050
-      output_cost_per_token: 0.00000220
+      order: 1
 
   - model_name: claude-opus-5
     litellm_params:
       model: openai/hy3-free
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
-      max_parallel_requests: 5
-    rpm: 30
-    model_info:
-      input_cost_per_token: 0.00000050
-      output_cost_per_token: 0.00000220
-
-  - model_name: claude-sonnet-5
-    litellm_params:
-      model: openai/sensenova-6.8-flash-lite
-      api_base: https://token.sensenova.ai/v1
-      api_key: os.environ/SENSENOVA_API_KEY
-      max_parallel_requests: 5
-    rpm: 30
-    model_info:
-      input_cost_per_token: 0.00000014
-      output_cost_per_token: 0.00000028
+      order: 2
 
   - model_name: claude-sonnet-5
     litellm_params:
       model: openai/agnes-2.5-flash
       api_base: https://apihub.agnes-ai.com/v1
       api_key: os.environ/AGNES_API_KEY
-      max_parallel_requests: 5
-    rpm: 30
-    model_info:
-      input_cost_per_token: 0.00000014
-      output_cost_per_token: 0.00000028
+      order: 1
+
+  - model_name: claude-sonnet-5
+    litellm_params:
+      model: openai/sensenova-6.8-flash-lite
+      api_base: https://token.sensenova.ai/v1
+      api_key: os.environ/SENSENOVA_API_KEY
+      order: 2
 
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b
       api_key: os.environ/NVIDIA_API_KEY_1
-      max_parallel_requests: 5
-    rpm: 40
-    model_info:
-      input_cost_per_token: 0.00000003
-      output_cost_per_token: 0.00000018
 
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b
       api_key: os.environ/NVIDIA_API_KEY_2
-      max_parallel_requests: 5
-    rpm: 40
-    model_info:
-      input_cost_per_token: 0.00000003
-      output_cost_per_token: 0.00000018
 
   - model_name: gemini-3.5
     litellm_params:
       model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY_1
       additional_drop_params: ["tools[*].strict"]
-      max_parallel_requests: 5
-      order: 1
     rpm: 15
     tpm: 240000
-    model_info:
-      input_cost_per_token: 0.00000003
-      output_cost_per_token: 0.00000018
 
   - model_name: gemini-3.5
     litellm_params:
       model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY_2
       additional_drop_params: ["tools[*].strict"]
-      max_parallel_requests: 5
-      order: 2
     rpm: 15
     tpm: 240000
-    model_info:
-      input_cost_per_token: 0.00000003
-      output_cost_per_token: 0.00000018
 
 litellm_settings:
   drop_params: true
   use_chat_completions_url_for_anthropic_messages: true
-  request_timeout: 120
 
 router_settings:
   enable_weighted_failover: true
-  optional_pre_call_checks:
-    - enforce_model_rate_limits
   fallbacks:
     - claude-opus-5: ["claude-haiku-4-5-20251001"]
     - claude-sonnet-5: ["claude-haiku-4-5-20251001"]
