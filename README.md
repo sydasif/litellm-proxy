@@ -14,15 +14,15 @@
   <a href="https://docs.docker.com/compose/"><img src="https://img.shields.io/badge/docker%20compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Compose"></a>
 </p>
 
-An AI Proxy Gateway that routes **Claude Code** and other clients through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, SenseNova, Agnes AI, Google Gemini) with load balancing, rate limiting, and weighted failover. Runs as a single instance with in-memory state (no database or UI).
+An AI Proxy Gateway that routes **Claude Code** and other clients through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, SenseNova, Agnes AI, Google Gemini) with load balancing, ordered failover, and cascading fallbacks. Runs as a single instance with in-memory state (no database or UI).
 
 ---
 
 ## Features
 
-- **Multi-Provider Routing**: Access OpenCode Zen, SenseNova, Agnes AI, NVIDIA NIM, and Google Gemini through unified virtual model names with weighted routing.
-- **Load Balancing**: `simple-shuffle` distributes requests across multiple model deployments.
-- **Rate Limiting**: Per-deployment RPM/TPM enforcement via `enforce_model_rate_limits`.
+- **Multi-Provider Routing**: Access OpenCode Zen, SenseNova, Agnes AI, NVIDIA NIM, and Google Gemini through unified virtual model names with ordered failover and shuffle load balancing.
+- **Load Balancing**: `simple-shuffle` distributes requests across the NVIDIA NIM (haiku) and Gemini deployment pools.
+- **Ordered Failover**: Opus and Sonnet pools run sequentially — the first-listed deployment handles all traffic until it fails, then traffic shifts to the second.
 - **Cascading Fallbacks**: 
   - `claude-opus-5` → `claude-haiku-4-5-20251001`
   - `claude-sonnet-5` → `claude-haiku-4-5-20251001`
@@ -39,12 +39,12 @@ An AI Proxy Gateway that routes **Claude Code** and other clients through **Lite
 
 ## Architecture & Model Mapping
 
-| Virtual Model Alias | Backend Deployments | Rate Limits |
+| Virtual Model Alias | Backend Deployments | Routing & Limits |
 | :--- | :--- | :--- |
-| `claude-opus-5` | • `openai/deepseek-v4-flash-free` (OpenCode Zen)<br>• `openai/hy3-free` (OpenCode Zen) | 30 RPM per deployment |
-| `claude-sonnet-5` | • `openai/sensenova-6.8-flash-lite` (SenseNova)<br>• `openai/agnes-2.5-flash` (Agnes AI) | 30 RPM per deployment |
-| `claude-haiku-4-5-20251001` | • `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (Key 1)<br>• `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (Key 2) | 40 RPM per deployment |
-| `gemini-3.5` | • `gemini/gemini-3.5-flash-lite` (Key 1)<br>• `gemini/gemini-3.5-flash-lite` (Key 2) | 15 RPM, 240K TPM per deployment |
+| `claude-opus-5` | • `openai/mimo-v2.5-free` (OpenCode Zen, 1st)<br>• `openai/hy3-free` (OpenCode Zen, 2nd) | Ordered failover: 1st deployment until it fails, then 2nd |
+| `claude-sonnet-5` | • `openai/sensenova-6.8-flash-lite` (SenseNova, 1st)<br>• `openai/agnes-2.5-flash` (Agnes AI, 2nd) | Ordered failover: 1st deployment until it fails, then 2nd |
+| `claude-haiku-4-5-20251001` | • `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (Key 1)<br>• `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (Key 2) | Load-balanced (`simple-shuffle`) across both keys |
+| `gemini-3.5` | • `gemini/gemini-3.5-flash-lite` (Key 1)<br>• `gemini/gemini-3.5-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 240K TPM per deployment |
 
 ---
 

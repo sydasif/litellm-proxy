@@ -4,19 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, SenseNova, Agnes AI, Google Gemini) with load balancing, rate limiting, and weighted failover. Runs as a single instance with in-memory state (no Postgres/Redis). Uses Docker Compose to deploy a patched LiteLLM image that fixes Nemotron thinking-stream and empty-choices streaming bugs.
+AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, SenseNova, Agnes AI, Google Gemini) with load balancing, ordered failover, and cascading fallbacks. Runs as a single instance with in-memory state (no Postgres/Redis). Uses Docker Compose to deploy a patched LiteLLM image that fixes Nemotron thinking-stream and empty-choices streaming bugs.
 
 ## Architecture
 
-**Model aliasing:** Virtual model names map to real provider models. Clients request the virtual name; LiteLLM load-balances across deployments.
+**Model aliasing:** Virtual model names map to real provider models. Clients request the virtual name; LiteLLM routes across deployments per the pool's strategy below.
 
 **Backend deployments:**
 
 | Virtual Model               | Deployment 1                                          | Deployment 2                                         | Deployment 3 | Deployment 4 |
 | --------------------------- | ----------------------------------------------------- | ---------------------------------------------------- | ------------ | ------------ |
-| `claude-opus-5`             | `openai/deepseek-v4-flash-free` (OpenCode Zen, RPM 30) | `openai/hy3-free` (OpenCode Zen, RPM 30)       | —            | —            |
-| `claude-sonnet-5`           | `openai/sensenova-6.8-flash-lite` (RPM 30)             | `openai/agnes-2.5-flash` (RPM 30)                    | —            | —            |
-| `claude-haiku-4-5-20251001` | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 1, RPM 40) | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 2, RPM 40) | — | — |
+| `claude-opus-5`             | `openai/mimo-v2.5-free` (OpenCode Zen, 1st)      | `openai/hy3-free` (OpenCode Zen, 2nd)       | —            | —            |
+| `claude-sonnet-5`           | `openai/sensenova-6.8-flash-lite` (SenseNova, 1st) | `openai/agnes-2.5-flash` (Agnes AI, 2nd)          | —            | —            |
+| `claude-haiku-4-5-20251001` | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 1) | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 2) | — | — |
 | `gemini-3.5`                | `gemini/gemini-3.5-flash-lite` (key 1, RPM 15, TPM 240K) | `gemini/gemini-3.5-flash-lite` (key 2, RPM 15, TPM 240K) | —      | —            |
 
 **Fallback chain (when all primary deployments are exhausted):**
@@ -29,9 +29,9 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 
 **Full failover cascade:** `opus/sonnet → haiku (NVIDIA NIM) → gemini`
 
-**Rate limits** enforced per-deployment via `enforce_model_rate_limits` — 30 RPM on OpenCode Zen (opus) and SenseNova/Agnes (sonnet) deployments, 40 RPM on NVIDIA NIM (haiku) deployments, 15 RPM / 240K TPM on Gemini deployments.
+**Routing strategies per pool:** Opus and Sonnet pools are ordered — the first-listed deployment serves all traffic until it fails (error/timeout), then LiteLLM shifts to the next. Haiku and Gemini pools are load-balanced (`simple-shuffle`) across their two deployments. Gemini's `rpm`/`tpm` entries are declarative limits consumed by LiteLLM's cooldown/health logic; no hard pre-call rate-limit check is configured.
 
-**Load balancing:** LiteLLM default (`simple-shuffle`) distributes requests across deployments per model name. `enable_weighted_failover: true` retries within a model's deployment pool before escalating to the fallback model.
+**Load balancing & failover:** `enable_weighted_failover: true` retries within a model's deployment pool before escalating to the fallback model.
 
 ## Patched Image (Nemotron thinking-stream + empty-choices fix)
 
@@ -95,9 +95,9 @@ python -c "import yaml; yaml.safe_load(open('litellm/config.yaml'))"
 
 Source of truth for routing and provider settings. Key behaviors:
 
-**`litellm_settings`:** `drop_params: true`, `use_chat_completions_url_for_anthropic_messages: true`, `request_timeout: 120`. No Redis.
+**`litellm_settings`:** `drop_params: true`, `use_chat_completions_url_for_anthropic_messages: true`. No Redis.
 
-**`router_settings`:** `enable_weighted_failover: true` (retries within the same model's deployment pool before escalating), `optional_pre_call_checks: [enforce_model_rate_limits]` — hard-enforces per-deployment RPM/TPM (tracked in-process for single instance). Fallback chain set via `fallbacks`. No Redis.
+**`router_settings`:** `enable_weighted_failover: true` (retries within the same model's deployment pool before escalating). Fallback chain set via `fallbacks`. No Redis.
 
 **`additional_drop_params: ["tools[*].strict"]`** — Applied to all Gemini deployments. Strips `strict: null` from tool definitions before sending to backends that reject non-boolean values. Fixes 400 validation errors from sglang-based providers.
 
@@ -115,7 +115,7 @@ curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
   -d '{"model": "claude-opus-5", "messages": [{"role": "user", "content": "Hello!"}], "max_tokens": 100}'
 
-# Test haiku (SenseNova/Agnes) with tools (validates additional_drop_params fix)
+# Test haiku with tools (validates additional_drop_params fix on Gemini deployments)
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
@@ -126,12 +126,14 @@ curl -X POST http://localhost:4000/v1/chat/completions \
     "tools": [{"type": "function", "function": {"name": "test", "strict": null, "parameters": {"type": "object"}}}]
   }'
 
-# Check deployment IDs and order
+# Check deployment IDs
 curl -s http://localhost:4000/v1/model/info \
   -H "Authorization: Bearer $LITELLM_MASTER_KEY" | \
-  python3 -c "import json,sys; [print(f'{m[\"model_name\"]:30s} {m[\"litellm_params\"].get(\"model\",\"?\"):40s} order:{m[\"litellm_params\"].get(\"order\",\"-\")}') for m in json.load(sys.stdin)['data']]"
+  python3 -c "import json,sys; [print(f'{m[\"model_name\"]:30s} {m[\"litellm_params\"].get(\"model\",\"?\"):40s}') for m in json.load(sys.stdin)['data']]"
 
-# Check load balancing (different x-litellm-model-id headers across requests)
+# Check load balancing (different x-litellm-model-id headers across requests).
+# Note: opus/sonnet pools use ordered failover, so these return the same
+# deployment ID unless the first deployment fails. Use haiku/gemini to see variation.
 for i in {1..6}; do
   curl -s -D - http://localhost:4000/v1/chat/completions \
     -H "Content-Type: application/json" \
