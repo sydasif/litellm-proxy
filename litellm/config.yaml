@@ -52,9 +52,12 @@ model_list:
 litellm_settings:
   drop_params: true
   use_chat_completions_url_for_anthropic_messages: true
+  request_timeout: 120
 
 router_settings:
   enable_weighted_failover: true
+  num_retries: 2
+  cooldown_time: 60
   fallbacks:
     - claude-opus-5: ["claude-haiku-4-5-20251001"]
     - claude-sonnet-5: ["claude-haiku-4-5-20251001"]

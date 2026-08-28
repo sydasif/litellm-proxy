@@ -29,11 +29,14 @@ An AI Proxy Gateway that routes **Claude Code** and other clients through **Lite
   - `claude-haiku-4-5-20251001` → `gemini-3.5`
 - **Parameter Normalization**: Drops unsupported parameters (`drop_params: true`) for cross-provider compatibility.
 - **Tool Compatibility**: Automatically strips `strict: null` from tool definitions (`additional_drop_params`) for sglang-based backends.
-- **Weighted Failover**: Retries within a model's deployment pool before escalating to fallback models.
-- **Anthropic Compatibility**: Routes client requests seamlessly via `/v1/chat/completions` and `/v1/messages`.
+- **Weighted Failover**: Retries within a model's deployment pool before escalating to fallback models (`num_retries: 2`).
+- **Request Resilience**: `request_timeout: 120` aborts hung upstream calls; `cooldown_time: 60` marks failing deployments unhealthy so traffic is rerouted fast.
+- **Lean Health Check**: Container liveness uses a stdlib `urllib` probe (no `curl`/`requests` dependency), with a 30s start period.
+- **Resource-Tuned Container**: Pinned to 1.5 CPUs / 2 GB RAM (proxy is I/O-bound) with 10 MB × 3 log rotation.
 - **Patched Streaming Image**: Builds a custom LiteLLM image (`litellm-proxy:patched`) fixing upstream thinking-stream adapter bugs and empty-choices crashes.
 - **Single-Instance Design**: No external database, Redis, or UI required — runs entirely via API.
 - **Health Checks**: Liveness (`/health/liveliness`) and readiness (`/health/readiness`) endpoints.
+- **Lean Build Context**: `.dockerignore` excludes `.env`, `.git/`, docs, and caches from the Docker build context.
 
 ---
 
@@ -113,12 +116,11 @@ curl -X POST http://localhost:4000/v1/chat/completions \
 
 ---
 
-## Project Structure
-
 ```bash
 litellm-proxy/
 ├── docker-compose.yml          # Docker Compose configuration (single instance, no DB/Redis)
 ├── Dockerfile                  # Builds litellm-proxy:patched with SSE streaming fix
+├── .dockerignore               # Keeps .env, .git, docs, caches out of the build context
 ├── patches/
 │   └── fix_nemotron_thinking_stream.py  # LiteLLM SSE thinking/streaming adapter patch
 ├── litellm/
@@ -145,6 +147,7 @@ litellm-proxy/
 
 - API keys are stored exclusively in environment variables (`.env` file).
 - `.env` file is gitignored to prevent accidental exposure of secrets.
+- `.dockerignore` keeps `.env` and `.git/` out of the Docker build context, so secrets are never shipped to the Docker daemon.
 
 ---
 

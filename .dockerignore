@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+.git/
+.claude/
+.gitignore
+*.md
+*.png
+*.log
+*.pid
+__pycache__/
+.ruff_cache/
+.playwright-mcp/
+docker-compose*.yml
+LICENSE

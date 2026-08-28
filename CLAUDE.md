@@ -29,9 +29,9 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 
 **Full failover cascade:** `opus/sonnet → haiku (NVIDIA NIM) → gemini`
 
-**Routing strategies per pool:** Opus and Sonnet pools are ordered — the first-listed deployment serves all traffic until it fails (error/timeout), then LiteLLM shifts to the next. Haiku and Gemini pools are load-balanced (`simple-shuffle`) across their two deployments. Gemini's `rpm`/`tpm` entries are declarative limits consumed by LiteLLM's cooldown/health logic; no hard pre-call rate-limit check is configured.
+**Load balancing & failover:** `enable_weighted_failover: true` retries within a model's deployment pool before escalating to the fallback model. `num_retries: 2` adds per-call retries; `cooldown_time: 60` marks a failing deployment unhealthy for 60s.
 
-**Load balancing & failover:** `enable_weighted_failover: true` retries within a model's deployment pool before escalating to the fallback model.
+**Resilience:** `request_timeout: 120` in `litellm_settings` aborts upstream calls that hang past 2 minutes, preventing cascading stalls.
 
 ## Patched Image (Nemotron thinking-stream + empty-choices fix)
 
@@ -95,9 +95,9 @@ python -c "import yaml; yaml.safe_load(open('litellm/config.yaml'))"
 
 Source of truth for routing and provider settings. Key behaviors:
 
-**`litellm_settings`:** `drop_params: true`, `use_chat_completions_url_for_anthropic_messages: true`. No Redis.
+**`litellm_settings`:** `drop_params: true`, `use_chat_completions_url_for_anthropic_messages: true`, `request_timeout: 120` (aborts hung upstream requests). No Redis.
 
-**`router_settings`:** `enable_weighted_failover: true` (retries within the same model's deployment pool before escalating). Fallback chain set via `fallbacks`. No Redis.
+**`router_settings`:** `enable_weighted_failover: true` (retries within the same model's deployment pool before escalating), `num_retries: 2` (per-call retries), `cooldown_time: 60` (seconds a failed deployment stays unhealthy). Fallback chain set via `fallbacks`. No Redis.
 
 **`additional_drop_params: ["tools[*].strict"]`** — Applied to all Gemini deployments. Strips `strict: null` from tool definitions before sending to backends that reject non-boolean values. Fixes 400 validation errors from sglang-based providers.
 
