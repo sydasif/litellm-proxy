@@ -1,27 +1,22 @@
 model_list:
   - model_name: claude-opus-5
     litellm_params:
-      model: openai/mimo-v2.5-free
+      model: openai/hy3-free
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
 
   - model_name: claude-opus-5
     litellm_params:
-      model: openai/hy3-free
-      api_base: https://opencode.ai/zen/v1
-      api_key: os.environ/OPENCODE_API_KEY
+      model: openai/hy3
+      api_base: https://api.b.ai/v1
+      api_key: os.environ/BAI_API_KEY
+      use_chat_completions_api: true
 
   - model_name: claude-sonnet-5
     litellm_params:
       model: openai/sensenova-6.8-flash-lite
       api_base: https://token.sensenova.ai/v1
       api_key: os.environ/SENSENOVA_API_KEY
-
-  - model_name: claude-sonnet-5
-    litellm_params:
-      model: openai/agnes-2.0-flash
-      api_base: https://apihub.agnes-ai.com/v1
-      api_key: os.environ/AGNES_API_KEY
 
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
