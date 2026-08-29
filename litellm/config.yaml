@@ -49,6 +49,22 @@ model_list:
     rpm: 15
     tpm: 240000
 
+  - model_name: gemini-3.1
+    litellm_params:
+      model: gemini/gemini-3.1-flash-lite
+      api_key: os.environ/GEMINI_API_KEY_1
+      additional_drop_params: ["tools[*].strict"]
+    rpm: 15
+    tpm: 240000
+
+  - model_name: gemini-3.1
+    litellm_params:
+      model: gemini/gemini-3.1-flash-lite
+      api_key: os.environ/GEMINI_API_KEY_2
+      additional_drop_params: ["tools[*].strict"]
+    rpm: 15
+    tpm: 240000
+
 litellm_settings:
   drop_params: true
   use_chat_completions_url_for_anthropic_messages: true
