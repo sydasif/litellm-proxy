@@ -18,6 +18,12 @@ model_list:
       api_base: https://token.sensenova.ai/v1
       api_key: os.environ/SENSENOVA_API_KEY
 
+  - model_name: claude-sonnet-5
+    litellm_params:
+      model: openai/agnes-2.0-flash
+      api_base: https://apihub.agnes-ai.com/v1
+      api_key: os.environ/AGNES_API_KEY
+
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b
