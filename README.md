@@ -45,9 +45,10 @@ An AI Proxy Gateway that routes **Claude Code** and other clients through **Lite
 | Virtual Model Alias | Backend Deployments | Routing & Limits |
 | :--- | :--- | :--- |
 | `claude-opus-5` | • `openai/mimo-v2.5-free` (OpenCode Zen, 1st)<br>• `openai/hy3-free` (OpenCode Zen, 2nd) | Ordered failover: 1st deployment until it fails, then 2nd |
-| `claude-sonnet-5` | • `openai/sensenova-6.8-flash-lite` (SenseNova, 1st)<br>• `openai/agnes-2.5-flash` (Agnes AI, 2nd) | Ordered failover: 1st deployment until it fails, then 2nd |
+| `claude-sonnet-5` | • `openai/hy3-free` (OpenCode Zen, 1st)<br>• `openai/sensenova-6.8-flash-lite` (SenseNova, 2nd)<br>• `openai/agnes-2.5-flash` (Agnes AI, 3rd) | Ordered failover: 1st deployment until it fails, then 2nd |
 | `claude-haiku-4-5-20251001` | • `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (Key 1)<br>• `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (Key 2) | Load-balanced (`simple-shuffle`) across both keys |
 | `gemini-3.5` | • `gemini/gemini-3.5-flash-lite` (Key 1)<br>• `gemini/gemini-3.5-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 240K TPM per deployment |
+| `gemini-3.1` | • `gemini/gemini-3.1-flash-lite` (Key 1)<br>• `gemini/gemini-3.1-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 240K TPM per deployment |
 
 ---
 
