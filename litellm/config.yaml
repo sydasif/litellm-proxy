@@ -93,10 +93,6 @@ litellm_settings:
   drop_params: true
   use_chat_completions_url_for_anthropic_messages: true
   request_timeout: 120
-  cache: True
-  cache_params:
-    type: disk
-    disk_cache_dir: /tmp/litellm-cache
 
 router_settings:
   routing_strategy: simple-shuffle
