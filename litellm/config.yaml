@@ -1,38 +1,54 @@
 model_list:
   - model_name: claude-opus-5
     litellm_params:
-      model: openai/hy3-free
-      api_base: https://opencode.ai/zen/v1
-      api_key: os.environ/OPENCODE_API_KEY
+      model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b
+      api_key: os.environ/NVIDIA_API_KEY_1
+      temperature: 1
+      top_p: 0.95
+      rmp: 40
 
   - model_name: claude-opus-5
     litellm_params:
-      model: openai/hy3
-      api_base: https://api.b.ai/v1
-      api_key: os.environ/BAI_API_KEY
-      use_chat_completions_api: true
+      model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b
+      api_key: os.environ/NVIDIA_API_KEY_2
+      temperature: 1
+      top_p: 0.95
+      rpm: 40
+
+  - model_name: claude-sonnet-5
+    litellm_params:
+      model: openai/hy3-free
+      api_base: https://opencode.ai/zen/v1
+      api_key: os.environ/OPENCODE_API_KEY
+      rpm: 30
 
   - model_name: claude-sonnet-5
     litellm_params:
       model: openai/sensenova-6.8-flash-lite
       api_base: https://token.sensenova.ai/v1
       api_key: os.environ/SENSENOVA_API_KEY
+      rpm: 30
 
   - model_name: claude-sonnet-5
     litellm_params:
-      model: openai/agnes-2.0-flash
+      model: openai/agnes-2.5-flash
       api_base: https://apihub.agnes-ai.com/v1
       api_key: os.environ/AGNES_API_KEY
+      rpm: 30
 
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b
       api_key: os.environ/NVIDIA_API_KEY_1
+      temperature: 1
+      top_p: 0.95
 
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b
       api_key: os.environ/NVIDIA_API_KEY_2
+      temperature: 1
+      top_p: 0.95
 
   - model_name: gemini-3.5
     litellm_params:
@@ -40,7 +56,7 @@ model_list:
       api_key: os.environ/GEMINI_API_KEY_1
       additional_drop_params: ["tools[*].strict"]
     rpm: 15
-    tpm: 240000
+    tpm: 250000
 
   - model_name: gemini-3.5
     litellm_params:
@@ -48,7 +64,7 @@ model_list:
       api_key: os.environ/GEMINI_API_KEY_2
       additional_drop_params: ["tools[*].strict"]
     rpm: 15
-    tpm: 240000
+    tpm: 250000
 
   - model_name: gemini-3.1
     litellm_params:
@@ -65,14 +81,27 @@ model_list:
       additional_drop_params: ["tools[*].strict"]
     rpm: 15
     tpm: 240000
+
+  - model_name: hy3
+    litellm_params:
+      model: openai/hy3
+      api_base: https://api.b.ai/v1
+      api_key: os.environ/BAI_API_KEY
+      use_chat_completions_api: true
 
 litellm_settings:
   drop_params: true
   use_chat_completions_url_for_anthropic_messages: true
   request_timeout: 120
+  cache: True
+  cache_params:
+    type: disk
+    disk_cache_dir: /tmp/litellm-cache
 
 router_settings:
-  enable_weighted_failover: true
+  routing_strategy: simple-shuffle
+  optional_pre_call_checks:
+    - enforce_model_rate_limits
   num_retries: 2
   cooldown_time: 60
   fallbacks:
