@@ -17,10 +17,10 @@ model_list:
 
   - model_name: claude-sonnet-5
     litellm_params:
-      model: openai/hy3-free
+      model: openai/big-pickle
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
-      rpm: 30
+      rpm: 40
 
   - model_name: claude-sonnet-5
     litellm_params:
@@ -31,10 +31,10 @@ model_list:
 
   - model_name: claude-sonnet-5
     litellm_params:
-      model: openai/agnes-2.5-flash
+      model: openai/agnes-2.0-flash
       api_base: https://apihub.agnes-ai.com/v1
       api_key: os.environ/AGNES_API_KEY
-      rpm: 30
+      rpm: 20
 
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
