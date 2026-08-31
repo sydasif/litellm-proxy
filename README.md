@@ -14,23 +14,23 @@
   <a href="https://docs.docker.com/compose/"><img src="https://img.shields.io/badge/docker%20compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Compose"></a>
 </p>
 
-An AI Proxy Gateway that routes **Claude Code** and other clients through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, SenseNova, Agnes AI, Google Gemini) with load balancing, ordered failover, and cascading fallbacks. Runs as a single instance with in-memory state (no database or UI).
+An AI Proxy Gateway that routes **Claude Code** and other clients through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, Google Gemini) with load balancing, ordered failover, and cascading fallbacks. Runs as a single instance with in-memory state (no database or UI).
 
 ---
 
 ## Features
 
-- **Multi-Provider Routing**: Access OpenCode Zen, SenseNova, Agnes AI, NVIDIA NIM, and Google Gemini through unified virtual model names with ordered failover and shuffle load balancing.
+- **Multi-Provider Routing**: Access NVIDIA NIM, OpenCode Zen, and Google Gemini through unified virtual model names with ordered failover and shuffle load balancing.
 - **Load Balancing**: `simple-shuffle` distributes requests across the NVIDIA NIM (haiku) and Gemini deployment pools.
 - **Ordered Failover**: Opus and Sonnet pools run sequentially — the first-listed deployment handles all traffic until it fails, then traffic shifts to the second.
 - **Cascading Fallbacks**: 
-  - `claude-opus-5` → `claude-haiku-4-5-20251001`
-  - `claude-sonnet-5` → `claude-haiku-4-5-20251001`
-  - `claude-haiku-4-5-20251001` → `gemini-3.5`
+  - `claude-opus-5` → `gemini-3.5`
+  - `claude-sonnet-5` → `gemini-3.5`
+  - `claude-haiku-4-5-20251001` → `gemini-3.1`
 - **Parameter Normalization**: Drops unsupported parameters (`drop_params: true`) for cross-provider compatibility.
 - **Tool Compatibility**: Automatically strips `strict: null` from tool definitions (`additional_drop_params`) for sglang-based backends.
-- **Weighted Failover**: Retries within a model's deployment pool before escalating to fallback models (`num_retries: 2`).
-- **Request Resilience**: `request_timeout: 120` aborts hung upstream calls; `cooldown_time: 60` marks failing deployments unhealthy so traffic is rerouted fast.
+- **Weighted Failover**: Retries within a model's deployment pool before escalating to fallback models (`num_retries: 1`).
+- **Request Resilience**: `request_timeout: 120` aborts hung upstream calls; `cooldown_time: 30` marks failing deployments unhealthy so traffic is rerouted fast.
 - **Lean Health Check**: Container liveness uses a stdlib `urllib` probe (no `curl`/`requests` dependency), with a 30s start period.
 - **Resource-Tuned Container**: Pinned to 1.5 CPUs / 2 GB RAM (proxy is I/O-bound) with 10 MB × 3 log rotation.
 - **Patched Streaming Image**: Builds a custom LiteLLM image (`litellm-proxy:patched`) fixing upstream thinking-stream adapter bugs and empty-choices crashes.
@@ -44,11 +44,11 @@ An AI Proxy Gateway that routes **Claude Code** and other clients through **Lite
 
 | Virtual Model Alias | Backend Deployments | Routing & Limits |
 | :--- | :--- | :--- |
-| `claude-opus-5` | • `openai/mimo-v2.5-free` (OpenCode Zen, 1st)<br>• `openai/hy3-free` (OpenCode Zen, 2nd) | Ordered failover: 1st deployment until it fails, then 2nd |
-| `claude-sonnet-5` | • `openai/hy3-free` (OpenCode Zen, 1st)<br>• `openai/sensenova-6.8-flash-lite` (SenseNova, 2nd)<br>• `openai/agnes-2.5-flash` (Agnes AI, 3rd) | Ordered failover: 1st deployment until it fails, then 2nd |
-| `claude-haiku-4-5-20251001` | • `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (Key 1)<br>• `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (Key 2) | Load-balanced (`simple-shuffle`) across both keys |
-| `gemini-3.5` | • `gemini/gemini-3.5-flash-lite` (Key 1)<br>• `gemini/gemini-3.5-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 240K TPM per deployment |
-| `gemini-3.1` | • `gemini/gemini-3.1-flash-lite` (Key 1)<br>• `gemini/gemini-3.1-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 240K TPM per deployment |
+| `claude-opus-5` | • `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (Key 1) | Single deployment |
+| `claude-sonnet-5` | • `openai/big-pickle` (OpenCode Zen) | Single deployment |
+| `claude-haiku-4-5-20251001` | • `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (Key 1) | Single deployment |
+| `gemini-3.5` | • `gemini/gemini-3.5-flash-lite` (Key 1)<br>• `gemini/gemini-3.5-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 250K TPM per deployment |
+| `gemini-3.1` | • `gemini/gemini-3.1-flash-lite` (Key 1)<br>• `gemini/gemini-3.1-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 250K TPM per deployment |
 
 ---
 
@@ -73,7 +73,7 @@ An AI Proxy Gateway that routes **Claude Code** and other clients through **Lite
    LITELLM_MASTER_KEY="sk-$(openssl rand -hex 24)"
    EOF
    ```
-   *(Be sure to edit `.env` and add your `OPENCODE_API_KEY`, `SENSENOVA_API_KEY`, `AGNES_API_KEY`, `NVIDIA_API_KEY_1`, `NVIDIA_API_KEY_2`, `GEMINI_API_KEY_1`, and `GEMINI_API_KEY_2`)*
+   *(Be sure to edit `.env` and add your `OPENCODE_API_KEY`, `NVIDIA_API_KEY_1`, `NVIDIA_API_KEY_2`, `GEMINI_API_KEY_1`, and `GEMINI_API_KEY_2`)*
 
 3. **Start the proxy stack (builds patched image automatically):**
    ```bash

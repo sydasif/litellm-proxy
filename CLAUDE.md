@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, SenseNova, Agnes AI, Google Gemini) with load balancing, ordered failover, and cascading fallbacks. Runs as a single instance with in-memory state (no Postgres/Redis). Uses Docker Compose to deploy a patched LiteLLM image that fixes Nemotron thinking-stream and empty-choices streaming bugs.
+AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, Google Gemini) with load balancing, ordered failover, and cascading fallbacks. Runs as a single instance with in-memory state (no Postgres/Redis). Uses Docker Compose to deploy a patched LiteLLM image that fixes Nemotron thinking-stream and empty-choices streaming bugs.
 
 ## Architecture
 
@@ -14,22 +14,23 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 
 | Virtual Model               | Deployment 1                                          | Deployment 2                                         | Deployment 3 | Deployment 4 |
 | --------------------------- | ----------------------------------------------------- | ---------------------------------------------------- | ------------ | ------------ |
-| `claude-opus-5`             | `openai/mimo-v2.5-free` (OpenCode Zen, 1st)      | `openai/hy3-free` (OpenCode Zen, 2nd)       | —            | —            |
-| `claude-sonnet-5`           | `openai/sensenova-6.8-flash-lite` (SenseNova, 1st) | `openai/agnes-2.5-flash` (Agnes AI, 2nd)          | —            | —            |
-| `claude-haiku-4-5-20251001` | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 1) | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 2) | — | — |
-| `gemini-3.5`                | `gemini/gemini-3.5-flash-lite` (key 1, RPM 15, TPM 240K) | `gemini/gemini-3.5-flash-lite` (key 2, RPM 15, TPM 240K) | —      | —            |
+| `claude-opus-5`             | `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (key 1) | —                                                    | —            | —            |
+| `claude-sonnet-5`           | `openai/big-pickle` (OpenCode Zen)                   | —                                                    | —            | —            |
+| `claude-haiku-4-5-20251001` | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 1) | —                                                    | —            | —            |
+| `gemini-3.5`                | `gemini/gemini-3.5-flash-lite` (key 1, RPM 15, TPM 250K) | `gemini/gemini-3.5-flash-lite` (key 2, RPM 15, TPM 250K) | —      | —            |
+| `gemini-3.1`                | `gemini/gemini-3.1-flash-lite` (key 1, RPM 15, TPM 250K) | `gemini/gemini-3.1-flash-lite` (key 2, RPM 15, TPM 250K) | —      | —            |
 
-**Fallback chain (when all primary deployments are exhausted):**
+**Fallback chain (when primary deployments fail):**
 
 | Model                       | Fallback to                  |
 | --------------------------- | ---------------------------- |
-| `claude-opus-5`             | `claude-haiku-4-5-20251001`  |
-| `claude-sonnet-5`           | `claude-haiku-4-5-20251001`  |
-| `claude-haiku-4-5-20251001` | `gemini-3.5`                     |
+| `claude-opus-5`             | `gemini-3.5`                 |
+| `claude-sonnet-5`           | `gemini-3.5`                 |
+| `claude-haiku-4-5-20251001` | `gemini-3.1`                 |
 
-**Full failover cascade:** `opus/sonnet → haiku (NVIDIA NIM) → gemini`
+**Full failover cascade:** `opus/sonnet → gemini`
 
-**Load balancing & failover:** `enable_weighted_failover: true` retries within a model's deployment pool before escalating to the fallback model. `num_retries: 2` adds per-call retries; `cooldown_time: 60` marks a failing deployment unhealthy for 60s.
+**Load balancing & failover:** `enable_weighted_failover: true` retries within a model's deployment pool before escalating to the fallback model. `num_retries: 1` adds per-call retries; `cooldown_time: 30` marks a failing deployment unhealthy for 30s.
 
 **Resilience:** `request_timeout: 120` in `litellm_settings` aborts upstream calls that hang past 2 minutes, preventing cascading stalls.
 

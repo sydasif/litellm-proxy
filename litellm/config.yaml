@@ -4,34 +4,12 @@ model_list:
       model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b
       api_key: os.environ/NVIDIA_API_KEY_1
 
-  - model_name: claude-opus-5
-    litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b
-      api_key: os.environ/NVIDIA_API_KEY_2
-
   - model_name: claude-sonnet-5
     litellm_params:
       model: openai/big-pickle
       api_base: https://opencode.ai/zen/v1
       api_key: os.environ/OPENCODE_API_KEY
 
-  - model_name: claude-sonnet-5
-    litellm_params:
-      model: openai/sensenova-6.8-flash-lite
-      api_base: https://token.sensenova.ai/v1
-      api_key: os.environ/SENSENOVA_API_KEY
-
-  - model_name: claude-sonnet-5
-    litellm_params:
-      model: openai/agnes-2.0-flash
-      api_base: https://apihub.agnes-ai.com/v1
-      api_key: os.environ/AGNES_API_KEY
-
-  - model_name: claude-haiku-4-5-20251001
-    litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b
-      api_key: os.environ/NVIDIA_API_KEY_1
-
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b
@@ -59,7 +37,7 @@ model_list:
       api_key: os.environ/GEMINI_API_KEY_1
       additional_drop_params: ["tools[*].strict"]
     rpm: 15
-    tpm: 240000
+    tpm: 250000
 
   - model_name: gemini-3.1
     litellm_params:
@@ -67,20 +45,21 @@ model_list:
       api_key: os.environ/GEMINI_API_KEY_2
       additional_drop_params: ["tools[*].strict"]
     rpm: 15
-    tpm: 240000
+    tpm: 250000
 
 litellm_settings:
   drop_params: true
   use_chat_completions_url_for_anthropic_messages: true
+  request_timeout: 120
 
 router_settings:
   routing_strategy: simple-shuffle
-  num_retries: 2
-  cooldown_time: 60
+  num_retries: 1
+  cooldown_time: 30
   fallbacks:
-    - claude-opus-5: ["claude-haiku-4-5-20251001"]
-    - claude-sonnet-5: ["claude-haiku-4-5-20251001"]
-    - claude-haiku-4-5-20251001: ["gemini-3.5"]
+    - claude-opus-5: ["gemini-3.5"]
+    - claude-sonnet-5: ["gemini-3.5"]
+    - claude-haiku-4-5-20251001: ["gemini-3.1"]
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
