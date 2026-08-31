@@ -30,7 +30,7 @@ An AI Proxy Gateway that routes **Claude Code** and other clients through **Lite
 - **Parameter Normalization**: Drops unsupported parameters (`drop_params: true`) for cross-provider compatibility.
 - **Tool Compatibility**: Automatically strips `strict: null` from tool definitions (`additional_drop_params`) for sglang-based backends.
 - **Weighted Failover**: Retries within a model's deployment pool before escalating to fallback models (`num_retries: 1`).
-- **Request Resilience**: `request_timeout: 120` aborts hung upstream calls; `cooldown_time: 30` marks failing deployments unhealthy so traffic is rerouted fast.
+- **Request Resilience**: `request_timeout: 90` aborts hung upstream calls; `cooldown_time: 60` marks failing deployments unhealthy so traffic is rerouted fast.
 - **Lean Health Check**: Container liveness uses a stdlib `urllib` probe (no `curl`/`requests` dependency), with a 30s start period.
 - **Resource-Tuned Container**: Pinned to 1.5 CPUs / 2 GB RAM (proxy is I/O-bound) with 10 MB × 3 log rotation.
 - **Patched Streaming Image**: Builds a custom LiteLLM image (`litellm-proxy:patched`) fixing upstream thinking-stream adapter bugs and empty-choices crashes.
@@ -45,8 +45,8 @@ An AI Proxy Gateway that routes **Claude Code** and other clients through **Lite
 | Virtual Model Alias | Backend Deployments | Routing & Limits |
 | :--- | :--- | :--- |
 | `claude-opus-5` | • `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (Key 1) | Single deployment |
-| `claude-sonnet-5` | • `openai/big-pickle` (OpenCode Zen) | Single deployment |
-| `claude-haiku-4-5-20251001` | • `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (Key 1) | Single deployment |
+| `claude-sonnet-5` | • `openai/hy3` (OpenCode Zen)<br>• `openai/agnes-2.0-flash` (Agnes AI) | Two deployments |
+| `claude-haiku-4-5-20251001` | • `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (Key 2) | Single deployment |
 | `gemini-3.5` | • `gemini/gemini-3.5-flash-lite` (Key 1)<br>• `gemini/gemini-3.5-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 250K TPM per deployment |
 | `gemini-3.1` | • `gemini/gemini-3.1-flash-lite` (Key 1)<br>• `gemini/gemini-3.1-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 250K TPM per deployment |
 

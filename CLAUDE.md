@@ -14,9 +14,9 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 
 | Virtual Model               | Deployment 1                                          | Deployment 2                                         | Deployment 3 | Deployment 4 |
 | --------------------------- | ----------------------------------------------------- | ---------------------------------------------------- | ------------ | ------------ |
-| `claude-opus-5`             | `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (key 1) | —                                                    | —            | —            |
-| `claude-sonnet-5`           | `openai/big-pickle` (OpenCode Zen)                   | —                                                    | —            | —            |
-| `claude-haiku-4-5-20251001` | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 1) | —                                                    | —            | —            |
+| `claude-opus-5`             | `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (key 1)          | —                                                      | —            | —            |
+| `claude-sonnet-5`           | `openai/hy3` (OpenCode Zen)                                     | `openai/agnes-2.0-flash` (Agnes AI)                    | —            | —            |
+| `claude-haiku-4-5-20251001` | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 2)       | —                                                      | —            | —            |
 | `gemini-3.5`                | `gemini/gemini-3.5-flash-lite` (key 1, RPM 15, TPM 250K) | `gemini/gemini-3.5-flash-lite` (key 2, RPM 15, TPM 250K) | —      | —            |
 | `gemini-3.1`                | `gemini/gemini-3.1-flash-lite` (key 1, RPM 15, TPM 250K) | `gemini/gemini-3.1-flash-lite` (key 2, RPM 15, TPM 250K) | —      | —            |
 
@@ -30,9 +30,9 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 
 **Full failover cascade:** `opus/sonnet → gemini`
 
-**Load balancing & failover:** `enable_weighted_failover: true` retries within a model's deployment pool before escalating to the fallback model. `num_retries: 1` adds per-call retries; `cooldown_time: 30` marks a failing deployment unhealthy for 30s.
+**Load balancing & failover:** `enable_weighted_failover: true` retries within a model's deployment pool before escalating to the fallback model. `num_retries: 1` adds per-call retries; `cooldown_time: 60` marks a failing deployment unhealthy for 60s.
 
-**Resilience:** `request_timeout: 120` in `litellm_settings` aborts upstream calls that hang past 2 minutes, preventing cascading stalls.
+**Resilience:** `request_timeout: 90` in `litellm_settings` aborts upstream calls that hang past 90 seconds, preventing cascading stalls.
 
 ## Patched Image (Nemotron thinking-stream + empty-choices fix)
 
@@ -96,9 +96,9 @@ python -c "import yaml; yaml.safe_load(open('litellm/config.yaml'))"
 
 Source of truth for routing and provider settings. Key behaviors:
 
-**`litellm_settings`:** `drop_params: true`, `use_chat_completions_url_for_anthropic_messages: true`, `request_timeout: 120` (aborts hung upstream requests). No Redis.
+**`litellm_settings`:** `drop_params: true`, `use_chat_completions_url_for_anthropic_messages: true`, `request_timeout: 90` (aborts hung upstream requests). No Redis.
 
-**`router_settings`:** `enable_weighted_failover: true` (retries within the same model's deployment pool before escalating), `num_retries: 2` (per-call retries), `cooldown_time: 60` (seconds a failed deployment stays unhealthy). Fallback chain set via `fallbacks`. No Redis.
+**`router_settings`:** `enable_weighted_failover: true` (retries within the same model's deployment pool before escalating), `num_retries: 1` (per-call retries), `cooldown_time: 60` (seconds a failed deployment stays unhealthy). Fallback chain set via `fallbacks`. No Redis.
 
 **`additional_drop_params: ["tools[*].strict"]`** — Applied to all Gemini deployments. Strips `strict: null` from tool definitions before sending to backends that reject non-boolean values. Fixes 400 validation errors from sglang-based providers.
 
