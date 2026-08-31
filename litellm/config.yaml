@@ -3,17 +3,29 @@ model_list:
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b
       api_key: os.environ/NVIDIA_API_KEY_1
+    rpm: 40
 
   - model_name: claude-sonnet-5
     litellm_params:
-      model: openai/big-pickle
-      api_base: https://opencode.ai/zen/v1
-      api_key: os.environ/OPENCODE_API_KEY
+      model: openai/hy3
+      api_base: https://api.b.ai/v1
+      api_key: os.environ/BAI_API_KEY
+      use_chat_completions_api: true
+    rpm: 20
+
+  - model_name: claude-sonnet-5
+    litellm_params:
+      model: openai/agnes-2.0-flash
+      api_base: https://apihub.agnes-ai.com/v1
+      api_key: os.environ/AGNES_API_KEY
+      use_chat_completions_api: true
+    rpm: 20
 
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b
       api_key: os.environ/NVIDIA_API_KEY_2
+    rmp: 40
 
   - model_name: gemini-3.5
     litellm_params:
@@ -50,12 +62,12 @@ model_list:
 litellm_settings:
   drop_params: true
   use_chat_completions_url_for_anthropic_messages: true
-  request_timeout: 120
+  request_timeout: 90
 
 router_settings:
   routing_strategy: simple-shuffle
   num_retries: 1
-  cooldown_time: 30
+  cooldown_time: 60
   fallbacks:
     - claude-opus-5: ["gemini-3.5"]
     - claude-sonnet-5: ["gemini-3.5"]
