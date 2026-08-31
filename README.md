@@ -14,24 +14,24 @@
   <a href="https://docs.docker.com/compose/"><img src="https://img.shields.io/badge/docker%20compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Compose"></a>
 </p>
 
-An AI Proxy Gateway that routes **Claude Code** and other clients through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, Google Gemini) with load balancing and cascading fallbacks. Runs as a single instance with in-memory state (no database or UI).
+An AI Proxy Gateway that routes **Claude Code** and other clients through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, Google Gemini) with load balancing and cascading fallbacks. Runs as a **multi-worker** instance (`--num_workers 2`) with **per-worker** in-memory state — the router's cooldown/usage counters are not shared across workers (no Postgres/Redis). Binds on `0.0.0.0:4000`; host network must isolate this port.
 
 ---
 
 ## Features
 
-- **Multi-Provider Routing**: Access NVIDIA NIM, OpenCode Zen, and Google Gemini through unified virtual model names with cascading fallbacks and shuffle load balancing.
-- **Load Balancing**: `simple-shuffle` (`routing_strategy` in `litellm/config.yaml`) distributes requests across the NVIDIA NIM (haiku) and Gemini deployment pools. Opus and Sonnet pools have a single deployment each, so no shuffle applies there.
-- **Cascading Fallbacks**: 
+- **Multi-Provider Routing**: Access NVIDIA NIM, OpenCode Zen, and Google Gemini through unified virtual model names with cascading fallbacks and usage-based load balancing.
+- **Load Balancing**: `usage-based-routing-v2` (`routing_strategy` in `litellm/config.yaml`) routes to the least-utilized deployment per worker. Only the Gemini pools have multiple deployments; the NVIDIA NIM (haiku/opus) and OpenCode Zen deployments each have a single endpoint, so routing is deterministic there.
+- **Cascading Fallbacks**:
   - `claude-opus-5` → `gemini-3.5`
   - `claude-sonnet-5` → `gemini-3.5`
   - `claude-haiku-4-5-20251001` → `gemini-3.1`
 - **Parameter Normalization**: Drops unsupported parameters (`drop_params: true`) for cross-provider compatibility.
 - **Tool Compatibility**: Automatically strips `strict: null` from tool definitions (`additional_drop_params`) for sglang-based backends.
-- **Lean Health Check**: Container liveness uses a stdlib `urllib` probe (no `curl`/`requests` dependency), with a 30s start period.
+- **Lean Health Check**: Container liveness uses a stdlib `urllib` probe (no `curl`/`requests` dependency), with a 15s start period and 30s interval.
 - **Resource-Tuned Container**: Pinned to 1.5 CPUs / 2 GB RAM (proxy is I/O-bound) with 10 MB × 3 log rotation.
 - **Patched Streaming Image**: Builds a custom LiteLLM image (`litellm-proxy:patched`) fixing upstream thinking-stream adapter bugs and empty-choices crashes.
-- **Single-Instance Design**: No external database, Redis, or UI required — runs entirely via API.
+- **Multi-Worker Design**: Runs 2 uvicorn workers via `--num_workers 2` — in-memory state (router cooldowns, usage counters, request spend) is **per-worker**, not shared. No external database, Redis, or UI required.
 - **Health Checks**: Liveness (`/health/liveliness`) and readiness (`/health/readiness`) endpoints.
 - **Lean Build Context**: `.dockerignore` excludes `.env`, `.env.*`, `.git/`, `.claude/`, all markdown (`*.md`), images (`logo.png`), docker compose files (`docker-compose*.yml`), and caches from the Docker build context.
 
@@ -39,13 +39,17 @@ An AI Proxy Gateway that routes **Claude Code** and other clients through **Lite
 
 ## Architecture & Model Mapping
 
-| Virtual Model Alias | Backend Deployments | Routing & Limits |
-| :--- | :--- | :--- |
-| `claude-opus-5` | • `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (Key 1) | Single deployment |
-| `claude-sonnet-5` | • `openai/hy3` (OpenCode Zen)<br>• `openai/agnes-2.0-flash` (Agnes AI) | Two deployments |
-| `claude-haiku-4-5-20251001` | • `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (Key 2) | Single deployment |
-| `gemini-3.5` | • `gemini/gemini-3.5-flash-lite` (Key 1)<br>• `gemini/gemini-3.5-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 250K TPM per deployment |
-| `gemini-3.1` | • `gemini/gemini-3.1-flash-lite` (Key 1)<br>• `gemini/gemini-3.1-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 250K TPM per deployment |
+| Virtual Model Alias         | Backend Deployments                                                                  | Routing & Limits                                                     |
+| :-------------------------- | :----------------------------------------------------------------------------------- | :------------------------------------------------------------------- |
+| `claude-opus-5`             | • `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (Key 1)                             | Single deployment                                                    |
+| `claude-sonnet-5`           | • `openai/hy3` (OpenCode Zen)<br>• `openai/agnes-2.0-flash` (Agnes AI)               | Two deployments                                                      |
+| `claude-haiku-4-5-20251001` | • `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (Key 2)                         | Single deployment                                                    |
+| `gemini-3.5`                | • `gemini/gemini-3.5-flash-lite` (Key 1)<br>• `gemini/gemini-3.5-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 250K TPM per deployment |
+| `gemini-3.1`                | • `gemini/gemini-3.1-flash-lite` (Key 1)<br>• `gemini/gemini-3.1-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 250K TPM per deployment |
+
+**Routing & resilience settings** (`litellm/config.yaml`): `routing_strategy: usage-based-routing-v2`, `num_retries: 2`, `cooldown_time: 45`, `allowed_fails: 2`, `request_timeout: 60` (global cap; per-deployment `timeout` ranges 25–60s, all at or below the cap). Fallback chain: `claude-opus-5` → `gemini-3.5`, `claude-sonnet-5` → `gemini-3.5`, `claude-haiku-4-5-20251001` → `gemini-3.1`.
+
+> Note: because the proxy runs `--num_workers 2`, the cooldown/usage counters are tracked **per worker**, so under concurrent load the effective failover coverage is roughly halved.
 
 ---
 
@@ -58,6 +62,7 @@ An AI Proxy Gateway that routes **Claude Code** and other clients through **Lite
 ## Setup & Installation
 
 1. **Clone and configure environment:**
+
    ```bash
    git clone <repository-url>
    cd litellm-proxy
@@ -70,9 +75,11 @@ An AI Proxy Gateway that routes **Claude Code** and other clients through **Lite
    LITELLM_MASTER_KEY="sk-$(openssl rand -hex 24)"
    EOF
    ```
-  *(Be sure to edit `.env` and add your `BAI_API_KEY`, `NVIDIA_API_KEY_1`, `NVIDIA_API_KEY_2`, `GEMINI_API_KEY_1`, and `GEMINI_API_KEY_2`)*
+
+_(Be sure to edit `.env` and add your `BAI_API_KEY`, `NVIDIA_API_KEY_1`, `NVIDIA_API_KEY_2`, `GEMINI_API_KEY_1`, and `GEMINI_API_KEY_2`)_
 
 3. **Start the proxy stack (builds patched image automatically):**
+
    ```bash
    docker compose up -d
    ```
@@ -92,6 +99,7 @@ All requests to the proxy use your `LITELLM_MASTER_KEY` as a Bearer token.
 ### Connecting Claude Code
 
 Configure environment variables in your shell profile (`~/.bashrc` or `~/.zshrc`):
+
 ```bash
 export ANTHROPIC_AUTH_TOKEN=$LITELLM_MASTER_KEY
 export ANTHROPIC_BASE_URL=http://localhost:4000
@@ -100,11 +108,13 @@ export ANTHROPIC_BASE_URL=http://localhost:4000
 ### Testing the Proxy
 
 List available models:
+
 ```bash
 curl -H "Authorization: Bearer $LITELLM_MASTER_KEY" http://localhost:4000/v1/models
 ```
 
 Test a chat completion:
+
 ```bash
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
@@ -116,7 +126,7 @@ curl -X POST http://localhost:4000/v1/chat/completions \
 
 ```bash
 litellm-proxy/
-├── docker-compose.yml          # Docker Compose configuration (single instance, no DB/Redis)
+├── docker-compose.yml          # Docker Compose configuration (2 workers, no DB/Redis; binds 0.0.0.0:4000)
 ├── Dockerfile                  # Builds litellm-proxy:patched with SSE streaming fix
 ├── .dockerignore               # Keeps .env, .git, docs, caches out of the build context
 ├── patches/
@@ -131,13 +141,13 @@ litellm-proxy/
 
 ## Maintenance
 
-| Task | Command |
-| :--- | :--- |
-| Update API keys | Edit `.env` file, then restart |
-| Modify routing/providers | Edit `litellm/config.yaml`, then restart |
-| Restart proxy | `docker compose down && docker compose up -d` |
-| Rebuild patched image | `docker compose build --no-cache litellm && docker compose up -d` |
-| View logs | `docker compose logs -f` |
+| Task                     | Command                                                           |
+| :----------------------- | :---------------------------------------------------------------- |
+| Update API keys          | Edit `.env` file, then restart                                    |
+| Modify routing/providers | Edit `litellm/config.yaml`, then restart                          |
+| Restart proxy            | `docker compose down && docker compose up -d`                     |
+| Rebuild patched image    | `docker compose build --no-cache litellm && docker compose up -d` |
+| View logs                | `docker compose logs -f`                                          |
 
 ---
 
