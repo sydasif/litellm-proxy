@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, Google Gemini) with load balancing, ordered failover, and cascading fallbacks. Runs as a single instance with in-memory state (no Postgres/Redis). Uses Docker Compose to deploy a patched LiteLLM image that fixes Nemotron thinking-stream and empty-choices streaming bugs.
+AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, Google Gemini) with load balancing and cascading fallbacks. Runs as a single instance with in-memory state (no Postgres/Redis). Uses Docker Compose to deploy a patched LiteLLM image that fixes Nemotron thinking-stream and empty-choices streaming bugs.
 
 ## Architecture
 
@@ -30,7 +30,7 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 
 **Full failover cascade:** `opus/sonnet → gemini`
 
-**Load balancing & failover:** `enable_weighted_failover: true` retries within a model's deployment pool before escalating to the fallback model. `num_retries: 1` adds per-call retries; `cooldown_time: 60` marks a failing deployment unhealthy for 60s.
+**Load balancing & failover:** `num_retries: 1` adds per-call retries within a model's deployment pool before escalating to the fallback model; `cooldown_time: 60` marks a failing deployment unhealthy for 60s.
 
 **Resilience:** `request_timeout: 90` in `litellm_settings` aborts upstream calls that hang past 90 seconds, preventing cascading stalls.
 
@@ -45,7 +45,7 @@ The proxy builds a `litellm-proxy:patched` image (`Dockerfile`) that rewrites ad
 
 **Upstream tracking:** as of 2026-08-12 the fixes in this patch are **not** merged upstream. Related open PRs: #32664 (guard thinking/signature deltas), #33241 (keep reasoning in thinking block on transitions), #33938 (block/delta type mismatch on combined chunks), #34795 (split combined reasoning+content chunks). When any of these merge, the adapter files change structurally and this patch will print `SKIP` lines at build — re-verify coverage before relying on the image.
 
-**Validated 2026-08-19 (browser):** re-confirmed against the pinned `litellm==1.92.0` adapter sources (raw `streaming_iterator.py` and `transformation.py`) and the live PR pages. All four patch functions apply with no `SKIP` against v1.92.0 — every byte-exact anchor (`sent_content_block_start` text-block open in both `__next__`/`__anext__`, the `# Reset state for new block` async transition, the `chunk.choices[0].finish_reason` empty-choices guard, the `reasoning_content`-before-`content` reorder) is present. PR #33252 still shows `Status: Open`, so the local patch remains required. Note: upstream #33252 targets `litellm_internal_staging` and assumes helpers (`_delta_has_content`, `_restore_tool_name_mapping`) that do not exist in 1.92.0 — this patch inlines those, so it is the correct adaptation for the pinned base image and is already hardened against the tool-name regression upstream reviewers flagged.
+**Validated 2026-08-19 (browser):** re-confirmed against the pinned `litellm==1.92.0` adapter sources (raw `streaming_iterator.py` and `transformation.py`) and the live PR pages. All four patch functions apply with no `SKIP` against v1.92.0 — every byte-exact anchor (`sent_content_block_start` text-block open in both `__next__`/`__anext__`, the `# Reset state for new block` async transition, the `chunk.choices[0].finish_reason` empty-choices guard, the `reasoning_content`-before-`content` reorder) is present. PR #33252 still shows `Status: Open`, so the local patch remains required. Note: upstream #33252 targets `litellm_internal_staging` and assumes helpers (`_delta_has_content`, `_restore_tool_name_mapping`) that do not exist in 1.92.0 — this patch inlines those helpers directly.
 
 **To rebuild after config or base-image changes:**
 
@@ -98,7 +98,7 @@ Source of truth for routing and provider settings. Key behaviors:
 
 **`litellm_settings`:** `drop_params: true`, `use_chat_completions_url_for_anthropic_messages: true`, `request_timeout: 90` (aborts hung upstream requests). No Redis.
 
-**`router_settings`:** `enable_weighted_failover: true` (retries within the same model's deployment pool before escalating), `num_retries: 1` (per-call retries), `cooldown_time: 60` (seconds a failed deployment stays unhealthy). Fallback chain set via `fallbacks`. No Redis.
+**`router_settings`:** `num_retries: 1` (per-call retries within a deployment pool before escalating), `cooldown_time: 60` (seconds a failed deployment stays unhealthy). Fallback chain set via `fallbacks`. No Redis.
 
 **`additional_drop_params: ["tools[*].strict"]`** — Applied to all Gemini deployments. Strips `strict: null` from tool definitions before sending to backends that reject non-boolean values. Fixes 400 validation errors from sglang-based providers.
 
@@ -133,8 +133,8 @@ curl -s http://localhost:4000/v1/model/info \
   python3 -c "import json,sys; [print(f'{m[\"model_name\"]:30s} {m[\"litellm_params\"].get(\"model\",\"?\"):40s}') for m in json.load(sys.stdin)['data']]"
 
 # Check load balancing (different x-litellm-model-id headers across requests).
-# Note: opus/sonnet pools use ordered failover, so these return the same
-# deployment ID unless the first deployment fails. Use haiku/gemini to see variation.
+# Note: all pools use simple-shuffle; opus/sonnet have a single deployment each so no variation is expected.
+# Use haiku or gemini to see load-balanced variation across requests.
 for i in {1..6}; do
   curl -s -D - http://localhost:4000/v1/chat/completions \
     -H "Content-Type: application/json" \

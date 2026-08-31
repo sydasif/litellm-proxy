@@ -25,7 +25,7 @@ model_list:
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b
       api_key: os.environ/NVIDIA_API_KEY_2
-    rmp: 40
+    rpm: 40
 
   - model_name: gemini-3.5
     litellm_params:

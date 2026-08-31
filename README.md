@@ -14,29 +14,26 @@
   <a href="https://docs.docker.com/compose/"><img src="https://img.shields.io/badge/docker%20compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Compose"></a>
 </p>
 
-An AI Proxy Gateway that routes **Claude Code** and other clients through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, Google Gemini) with load balancing, ordered failover, and cascading fallbacks. Runs as a single instance with in-memory state (no database or UI).
+An AI Proxy Gateway that routes **Claude Code** and other clients through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, Google Gemini) with load balancing and cascading fallbacks. Runs as a single instance with in-memory state (no database or UI).
 
 ---
 
 ## Features
 
-- **Multi-Provider Routing**: Access NVIDIA NIM, OpenCode Zen, and Google Gemini through unified virtual model names with ordered failover and shuffle load balancing.
-- **Load Balancing**: `simple-shuffle` distributes requests across the NVIDIA NIM (haiku) and Gemini deployment pools.
-- **Ordered Failover**: Opus and Sonnet pools run sequentially — the first-listed deployment handles all traffic until it fails, then traffic shifts to the second.
+- **Multi-Provider Routing**: Access NVIDIA NIM, OpenCode Zen, and Google Gemini through unified virtual model names with cascading fallbacks and shuffle load balancing.
+- **Load Balancing**: `simple-shuffle` (`routing_strategy` in `litellm/config.yaml`) distributes requests across the NVIDIA NIM (haiku) and Gemini deployment pools. Opus and Sonnet pools have a single deployment each, so no shuffle applies there.
 - **Cascading Fallbacks**: 
   - `claude-opus-5` → `gemini-3.5`
   - `claude-sonnet-5` → `gemini-3.5`
   - `claude-haiku-4-5-20251001` → `gemini-3.1`
 - **Parameter Normalization**: Drops unsupported parameters (`drop_params: true`) for cross-provider compatibility.
 - **Tool Compatibility**: Automatically strips `strict: null` from tool definitions (`additional_drop_params`) for sglang-based backends.
-- **Weighted Failover**: Retries within a model's deployment pool before escalating to fallback models (`num_retries: 1`).
-- **Request Resilience**: `request_timeout: 90` aborts hung upstream calls; `cooldown_time: 60` marks failing deployments unhealthy so traffic is rerouted fast.
 - **Lean Health Check**: Container liveness uses a stdlib `urllib` probe (no `curl`/`requests` dependency), with a 30s start period.
 - **Resource-Tuned Container**: Pinned to 1.5 CPUs / 2 GB RAM (proxy is I/O-bound) with 10 MB × 3 log rotation.
 - **Patched Streaming Image**: Builds a custom LiteLLM image (`litellm-proxy:patched`) fixing upstream thinking-stream adapter bugs and empty-choices crashes.
 - **Single-Instance Design**: No external database, Redis, or UI required — runs entirely via API.
 - **Health Checks**: Liveness (`/health/liveliness`) and readiness (`/health/readiness`) endpoints.
-- **Lean Build Context**: `.dockerignore` excludes `.env`, `.git/`, docs, and caches from the Docker build context.
+- **Lean Build Context**: `.dockerignore` excludes `.env`, `.env.*`, `.git/`, `.claude/`, all markdown (`*.md`), images (`logo.png`), docker compose files (`docker-compose*.yml`), and caches from the Docker build context.
 
 ---
 
@@ -73,7 +70,7 @@ An AI Proxy Gateway that routes **Claude Code** and other clients through **Lite
    LITELLM_MASTER_KEY="sk-$(openssl rand -hex 24)"
    EOF
    ```
-   *(Be sure to edit `.env` and add your `OPENCODE_API_KEY`, `NVIDIA_API_KEY_1`, `NVIDIA_API_KEY_2`, `GEMINI_API_KEY_1`, and `GEMINI_API_KEY_2`)*
+  *(Be sure to edit `.env` and add your `BAI_API_KEY`, `NVIDIA_API_KEY_1`, `NVIDIA_API_KEY_2`, `GEMINI_API_KEY_1`, and `GEMINI_API_KEY_2`)*
 
 3. **Start the proxy stack (builds patched image automatically):**
    ```bash
