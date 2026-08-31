@@ -1,16 +1,20 @@
 model_list:
+  # --- Claude Opus Virtual Tier ---
   - model_name: claude-opus-5
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b
       api_key: os.environ/NVIDIA_API_KEY_1
+      timeout: 60
     rpm: 40
 
+  # --- Claude Sonnet Virtual Tier (Load Balanced across Providers) ---
   - model_name: claude-sonnet-5
     litellm_params:
       model: openai/hy3
       api_base: https://api.b.ai/v1
       api_key: os.environ/BAI_API_KEY
       use_chat_completions_api: true
+      timeout: 45
     rpm: 20
 
   - model_name: claude-sonnet-5
@@ -19,19 +23,24 @@ model_list:
       api_base: https://apihub.agnes-ai.com/v1
       api_key: os.environ/AGNES_API_KEY
       use_chat_completions_api: true
+      timeout: 45
     rpm: 20
 
+  # --- Claude Haiku Fast Tier ---
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b
       api_key: os.environ/NVIDIA_API_KEY_2
+      timeout: 30
     rpm: 40
 
+  # --- Gemini Tier (Pooled Keys & Shared Capacity) ---
   - model_name: gemini-3.5
     litellm_params:
       model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY_1
       additional_drop_params: ["tools[*].strict"]
+      timeout: 30
     rpm: 15
     tpm: 250000
 
@@ -40,6 +49,7 @@ model_list:
       model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY_2
       additional_drop_params: ["tools[*].strict"]
+      timeout: 30
     rpm: 15
     tpm: 250000
 
@@ -48,6 +58,7 @@ model_list:
       model: gemini/gemini-3.1-flash-lite
       api_key: os.environ/GEMINI_API_KEY_1
       additional_drop_params: ["tools[*].strict"]
+      timeout: 25
     rpm: 15
     tpm: 250000
 
@@ -56,18 +67,23 @@ model_list:
       model: gemini/gemini-3.1-flash-lite
       api_key: os.environ/GEMINI_API_KEY_2
       additional_drop_params: ["tools[*].strict"]
+      timeout: 25
     rpm: 15
     tpm: 250000
 
 litellm_settings:
   drop_params: true
   use_chat_completions_url_for_anthropic_messages: true
-  request_timeout: 90
+  request_timeout: 60
 
 router_settings:
-  routing_strategy: simple-shuffle
-  num_retries: 1
-  cooldown_time: 60
+  # usage-based-routing ensures requests route to the least-utilized key/endpoint
+  routing_strategy: usage-based-routing-v2
+  num_retries: 2 # Retry twice before tripping fallback
+  retry_after: 1 # Initial backoff in seconds
+  cooldown_time: 45 # Shorter cooldown for transient errors
+  allowed_fails: 2 # Mark deployment unhealthy after 2 consecutive failures
+
   fallbacks:
     - claude-opus-5: ["gemini-3.5"]
     - claude-sonnet-5: ["gemini-3.5"]
