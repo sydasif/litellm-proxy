@@ -6,3 +6,7 @@ use_default_settings: true
 server:
   secret_key: "MswPHL4tfxqDbwiphRgcHrNabeK07iJ"
   image_proxy: true
+search:
+  format:
+    - json
+    - html
