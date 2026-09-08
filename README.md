@@ -29,7 +29,7 @@ An AI Proxy Gateway that routes **Claude Code** and other clients through **Lite
 - **Parameter Normalization**: Drops unsupported parameters (`drop_params: true`) for cross-provider compatibility.
 - **Tool Compatibility**: Automatically strips `strict: null` from tool definitions (`additional_drop_params`) for sglang-based backends.
 - **Lean Health Check**: Container liveness uses a stdlib `urllib` probe (no `curl`/`requests` dependency), with a 15s start period and 30s interval.
-- **Resource-Tuned Container**: Pinned to 1.5 CPUs / 2 GB RAM (proxy is I/O-bound) with 10 MB × 3 log rotation.
+- **Resource-Tuned Container**: Pinned to 2 CPUs / 4 GB RAM (proxy is I/O-bound) with 10 MB × 3 log rotation.
 - **Patched Streaming Image**: Builds a custom LiteLLM image (`litellm-proxy:patched`) fixing upstream thinking-stream adapter bugs and empty-choices crashes.
 - **Multi-Worker Design**: Runs 2 uvicorn workers via `--num_workers 2` — in-memory state (router cooldowns, usage counters, request spend) is **per-worker**, not shared. No external database, Redis, or UI required.
 - **Health Checks**: Liveness (`/health/liveliness`) and readiness (`/health/readiness`) endpoints.
