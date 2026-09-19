@@ -21,14 +21,6 @@ model_list:
       use_chat_completions_api: true
     rpm: 20
 
-  - model_name: claude-sonnet-5
-    litellm_params:
-      model: openai/DeepSeek-V4-Flash
-      api_base: https://developer.amd.com.cn/radeon/api/v1
-      api_key: os.environ/AMD_API_KEY
-      use_chat_completions_api: true
-    rpm: 20
-
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b
@@ -67,6 +59,13 @@ model_list:
     rpm: 15
     tpm: 250000
 
+  - model_name: minicpm5-2b
+    litellm_params:
+      model: openai/MiniCPM5-2B
+      api_base: https://developer.amd.com.cn/radeon/api/v1
+      api_key: os.environ/AMD_API_KEY
+      use_chat_completions_api: true
+
 litellm_settings:
   drop_params: true
   use_chat_completions_url_for_anthropic_messages: true
@@ -78,10 +77,12 @@ router_settings:
   cooldown_time: 60 # Shorter cooldown for transient errors
 
   fallbacks:
-    - claude-opus-5: ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
-    - claude-sonnet-5: ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
+    - claude-opus-5:
+        ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "minicpm5-2b"]
+    - claude-sonnet-5:
+        ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "minicpm5-2b"]
     - claude-haiku-4-5-20251001:
-        ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
+        ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "minicpm5-2b"]
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
