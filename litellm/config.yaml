@@ -3,6 +3,7 @@ model_list:
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b
       api_key: os.environ/NVIDIA_API_KEY_1
+      max_parallel_requests: 10
     rpm: 40
 
   - model_name: claude-sonnet-5
@@ -25,6 +26,7 @@ model_list:
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
       api_key: os.environ/NVIDIA_API_KEY_2
+      max_parallel_requests: 10
     rpm: 40
 
   - model_name: gemini-3.5-flash-lite
