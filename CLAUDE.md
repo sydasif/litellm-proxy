@@ -12,13 +12,13 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 
 **Backend deployments:**
 
-| Virtual Model               | Deployment 1                                               | Deployment 2                                             | Deployment 3 | Deployment 4 |
-| --------------------------- | ---------------------------------------------------------- | -------------------------------------------------------- | ------------ | ------------ |
-| `claude-opus-5`             | `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (key 1)     | —                                                        | —            | —            |
-| `claude-sonnet-5`           | `openai/hy3` (OpenCode Zen)                                | `openai/agnes-2.0-flash` (Agnes AI)                      | —            | —            |
-| `claude-haiku-4-5-20251001` | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 2) | —                                                        | —            | —            |
-| `gemini-3.5`                | `gemini/gemini-3.5-flash-lite` (key 1, RPM 15, TPM 250K)   | `gemini/gemini-3.5-flash-lite` (key 2, RPM 15, TPM 250K) | —            | —            |
-| `gemini-3.1`                | `gemini/gemini-3.1-flash-lite` (key 1, RPM 15, TPM 250K)   | `gemini/gemini-3.1-flash-lite` (key 2, RPM 15, TPM 250K) | —            | —            |
+| Virtual Model               | Deployment 1                                                       | Deployment 2                                             | Deployment 3 | Deployment 4 |
+| --------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------- | ------------ | ------------ |
+| `claude-opus-5`             | `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (key 1)             | —                                                        | —            | —            |
+| `claude-sonnet-5`           | `openai/hy3` (OpenCode Zen)                                        | `openai/agnes-2.0-flash` (Agnes AI)                      | —            | —            |
+| `claude-haiku-4-5-20251001` | `nvidia_nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` (key 2) | —                                                        | —            | —            |
+| `gemini-3.5`                | `gemini/gemini-3.5-flash-lite` (key 1, RPM 15, TPM 250K)           | `gemini/gemini-3.5-flash-lite` (key 2, RPM 15, TPM 250K) | —            | —            |
+| `gemini-3.1`                | `gemini/gemini-3.1-flash-lite` (key 1, RPM 15, TPM 250K)           | `gemini/gemini-3.1-flash-lite` (key 2, RPM 15, TPM 250K) | —            | —            |
 
 **Fallback chain (when primary deployments fail):**
 
@@ -30,9 +30,9 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 
 **Full failover cascade:** `opus/sonnet → gemini`
 
-**Load balancing & failover:** `routing_strategy: usage-based-routing-v2` routes to the least-utilized deployment per worker; `num_retries: 2` adds per-call retries within a model's deployment pool before escalating to the fallback model; `cooldown_time: 45` marks a failing deployment unhealthy for 45s; `allowed_fails: 2` trips a deployment after 2 consecutive failures. Note: because the proxy runs `--num_workers 2`, these counters are tracked **per worker**, so effective failover coverage is roughly halved under concurrent load.
+**Load balancing & failover:** `routing_strategy: simple-shuffle` routes to the least-utilized deployment per worker; `num_retries: 2` adds per-call retries within a model's deployment pool before escalating to the fallback model; `cooldown_time: 60` marks a failing deployment unhealthy for 60s; `allowed_fails: 2` trips a deployment after 2 consecutive failures. Note: because the proxy runs `--num_workers 2`, these counters are tracked **per worker**, so effective failover coverage is roughly halved under concurrent load.
 
-**Resilience:** `request_timeout: 60` in `litellm_settings` aborts upstream calls that hang past 60 seconds, preventing cascading stalls. Per-deployment `timeout` (opus 60, sonnet 45, haiku 30, gemini 25–30) sit at or below the global cap.
+**Resilience:** `request_timeout: 180` in `litellm_settings` aborts upstream calls that hang past 180 seconds, preventing cascading stalls. Per-deployment `timeout` (opus 60, sonnet 45, haiku 30, gemini 25–30) sit at or below the global cap.
 
 ## Patched Image (Nemotron thinking-stream + empty-choices fix)
 
@@ -96,9 +96,9 @@ python -c "import yaml; yaml.safe_load(open('litellm/config.yaml'))"
 
 Source of truth for routing and provider settings. Key behaviors:
 
-**`litellm_settings`:** `drop_params: true`, `use_chat_completions_url_for_anthropic_messages: true`, `request_timeout: 60` (aborts hung upstream requests). No Redis.
+**`litellm_settings`:** `drop_params: true`, `use_chat_completions_url_for_anthropic_messages: true`, `request_timeout: 180` (aborts hung upstream requests). No Redis.
 
-**`router_settings`:** `routing_strategy: usage-based-routing-v2` (least-utilized deployment per worker), `num_retries: 2` (per-call retries within a deployment pool before escalating), `cooldown_time: 45` (seconds a failed deployment stays unhealthy), `allowed_fails: 2` (consecutive failures before a deployment is marked unhealthy), `retry_after: 1` (backoff — **verify this key is honored by the pinned `litellm==1.92.0`; it is not a documented router key and may be silently ignored**). Fallback chain set via `fallbacks`. No Redis.
+**`router_settings`:** `routing_strategy: simple-shuffle` (least-utilized deployment per worker), `num_retries: 2` (per-call retries within a deployment pool before escalating), `cooldown_time: 60` (seconds a failed deployment stays unhealthy), `allowed_fails: 2` (consecutive failures before a deployment is marked unhealthy), `retry_after: 1` (backoff — **verify this key is honored by the pinned `litellm==1.92.0`; it is not a documented router key and may be silently ignored**). Fallback chain set via `fallbacks`. No Redis.
 
 **`additional_drop_params: ["tools[*].strict"]`** — Applied to all Gemini deployments. Strips `strict: null` from tool definitions before sending to backends that reject non-boolean values. Fixes 400 validation errors from sglang-based providers.
 
@@ -133,7 +133,7 @@ curl -s http://localhost:4000/v1/model/info \
   python3 -c "import json,sys; [print(f'{m[\"model_name\"]:30s} {m[\"litellm_params\"].get(\"model\",\"?\"):40s}') for m in json.load(sys.stdin)['data']]"
 
 # Check load balancing (different x-litellm-model-id headers across requests).
-# Note: pools now use usage-based-routing-v2. Opus has a single deployment; sonnet/haiku/gemini have
+# Note: pools now use simple-shuffle. Opus has a single deployment; sonnet/haiku/gemini have
 # multiple deployments per pool so you should see variation — however, with --num_workers 2, counters
 # are per-worker, so concurrent requests may not show perfect round-robin behavior.
 for i in {1..6}; do

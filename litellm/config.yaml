@@ -23,7 +23,7 @@ model_list:
 
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b
+      model: nvidia_nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
       api_key: os.environ/NVIDIA_API_KEY_2
     rpm: 40
 

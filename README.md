@@ -21,7 +21,7 @@ An AI Proxy Gateway that routes **Claude Code** and other clients through **Lite
 ## Features
 
 - **Multi-Provider Routing**: Access NVIDIA NIM, OpenCode Zen, and Google Gemini through unified virtual model names with cascading fallbacks and usage-based load balancing.
-- **Load Balancing**: `usage-based-routing-v2` (`routing_strategy` in `litellm/config.yaml`) routes to the least-utilized deployment per worker. Only the Gemini pools have multiple deployments; the NVIDIA NIM (haiku/opus) and OpenCode Zen deployments each have a single endpoint, so routing is deterministic there.
+- **Load Balancing**: `simple-shuffle` (`routing_strategy` in `litellm/config.yaml`) routes to the least-utilized deployment per worker. Only the Gemini pools have multiple deployments; the NVIDIA NIM (haiku/opus) and OpenCode Zen deployments each have a single endpoint, so routing is deterministic there.
 - **Cascading Fallbacks**:
   - `claude-opus-5` → `gemini-3.5`
   - `claude-sonnet-5` → `gemini-3.5`
@@ -43,11 +43,11 @@ An AI Proxy Gateway that routes **Claude Code** and other clients through **Lite
 | :-------------------------- | :----------------------------------------------------------------------------------- | :------------------------------------------------------------------- |
 | `claude-opus-5`             | • `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (Key 1)                             | Single deployment                                                    |
 | `claude-sonnet-5`           | • `openai/hy3` (OpenCode Zen)<br>• `openai/agnes-2.0-flash` (Agnes AI)               | Two deployments                                                      |
-| `claude-haiku-4-5-20251001` | • `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (Key 2)                         | Single deployment                                                    |
+| `claude-haiku-4-5-20251001` | • `nvidia_nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` (Key 2)                 | Single deployment                                                    |
 | `gemini-3.5`                | • `gemini/gemini-3.5-flash-lite` (Key 1)<br>• `gemini/gemini-3.5-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 250K TPM per deployment |
 | `gemini-3.1`                | • `gemini/gemini-3.1-flash-lite` (Key 1)<br>• `gemini/gemini-3.1-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 250K TPM per deployment |
 
-**Routing & resilience settings** (`litellm/config.yaml`): `routing_strategy: usage-based-routing-v2`, `num_retries: 2`, `cooldown_time: 45`, `allowed_fails: 2`, `request_timeout: 60` (global cap; per-deployment `timeout` ranges 25–60s, all at or below the cap). Fallback chain: `claude-opus-5` → `gemini-3.5`, `claude-sonnet-5` → `gemini-3.5`, `claude-haiku-4-5-20251001` → `gemini-3.1`.
+**Routing & resilience settings** (`litellm/config.yaml`): `routing_strategy: simple-shuffle`, `num_retries: 2`, `cooldown_time: 60`, `allowed_fails: 2`, `request_timeout: 180` (global cap; per-deployment `timeout` ranges 25–60s, all at or below the cap). Fallback chain: `claude-opus-5` → `gemini-3.5`, `claude-sonnet-5` → `gemini-3.5`, `claude-haiku-4-5-20251001` → `gemini-3.1`.
 
 > Note: because the proxy runs `--num_workers 2`, the cooldown/usage counters are tracked **per worker**, so under concurrent load the effective failover coverage is roughly halved.
 
