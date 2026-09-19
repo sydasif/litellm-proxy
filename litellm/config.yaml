@@ -23,14 +23,6 @@ model_list:
 
   - model_name: claude-sonnet-5
     litellm_params:
-      model: openai/hy3
-      api_base: https://api.b.ai/v1
-      api_key: os.environ/BAI_API_KEY
-      use_chat_completions_api: true
-    rpm: 20
-
-  - model_name: claude-sonnet-5
-    litellm_params:
       model: openai/DeepSeek-V4-Flash
       api_base: https://developer.amd.com.cn/radeon/api/v1
       api_key: os.environ/AMD_API_KEY
