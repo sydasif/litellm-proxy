@@ -8,26 +8,26 @@
   <a href="https://hub.docker.com/r/litellm/litellm"><img src="https://img.shields.io/badge/LiteLLM-blueviolet?style=for-the-badge" alt="LiteLLM"></a>
   <a href="https://claude.com/product/claude-code"><img src="https://img.shields.io/badge/Claude%20Code-D97757?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code"></a>
   <a href="https://build.nvidia.com/"><img src="https://img.shields.io/badge/NVIDIA%20NIM-76B900?style=for-the-badge&logo=nvidia&logoColor=white" alt="NVIDIA NIM"></a>
-  <a href="https://opencode.ai"><img src="https://img.shields.io/badge/OpenCode%20Zen-6C47FF?style=for-the-badge" alt="OpenCode Zen"></a>
+  <a href="https://ai.google.dev/"><img src="https://img.shields.io/badge/Google%20Gemini-4285F4?style=for-the-badge&logo=googlegemini&logoColor=white" alt="Google Gemini"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python"></a>
   <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white" alt="Docker"></a>
   <a href="https://docs.docker.com/compose/"><img src="https://img.shields.io/badge/docker%20compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Compose"></a>
 </p>
 
-An AI Proxy Gateway that routes **Claude Code** and other clients through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, OpenCode Zen, Google Gemini) with load balancing and cascading fallbacks. Runs as a **multi-worker** instance (`--num_workers 2`) with **per-worker** in-memory state — the router's cooldown/usage counters are not shared across workers (no Postgres/Redis). Binds on `0.0.0.0:4000`; host network must isolate this port.
+An AI Proxy Gateway that routes **Claude Code** and other clients through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, Agnes AI, SenseNova, Google Gemini, AMD Radeon) with load balancing and cascading fallbacks. Runs as a **multi-worker** instance (`--num_workers 2`) with **per-worker** in-memory state — the router's cooldown/usage counters are not shared across workers (no Postgres/Redis). Binds on `0.0.0.0:4000`; host network must isolate this port.
 
 ---
 
 ## Features
 
-- **Multi-Provider Routing**: Access NVIDIA NIM, OpenCode Zen, and Google Gemini through unified virtual model names with cascading fallbacks and usage-based load balancing.
-- **Load Balancing**: `simple-shuffle` (`routing_strategy` in `litellm/config.yaml`) routes to the least-utilized deployment per worker. Only the Gemini pools have multiple deployments; the NVIDIA NIM (haiku/opus) and OpenCode Zen deployments each have a single endpoint, so routing is deterministic there.
-- **Cascading Fallbacks**:
-  - `claude-opus-5` → `gemini-3.5`
-  - `claude-sonnet-5` → `gemini-3.5`
-  - `claude-haiku-4-5-20251001` → `gemini-3.1`
+- **Multi-Provider Routing**: Access NVIDIA NIM, Agnes AI, SenseNova, Google Gemini, and AMD Radeon endpoints through unified virtual model names with cascading fallbacks and usage-based load balancing.
+- **Load Balancing**: `simple-shuffle` (`routing_strategy` in `litellm/config.yaml`) routes to the least-utilized deployment per worker. Only `claude-sonnet-5` (Agnes AI + SenseNova) and the two Gemini pools have multiple deployments; `claude-opus-5`, `claude-haiku-4-5-20251001`, and `minicpm5-2b` are single-endpoint, so routing is deterministic there.
+- **Cascading Fallbacks**: every Claude alias follows the same ordered cascade —
+  1. `gemini-3.5-flash-lite`
+  2. `gemini-3.1-flash-lite`
+  3. `minicpm5-2b`
 - **Parameter Normalization**: Drops unsupported parameters (`drop_params: true`) for cross-provider compatibility.
-- **Tool Compatibility**: Automatically strips `strict: null` from tool definitions (`additional_drop_params`) for sglang-based backends.
+- **Tool Compatibility**: Automatically strips `strict: null` from tool definitions (`additional_drop_params` on every Gemini deployment) for backends that reject non-boolean values.
 - **Lean Health Check**: Container liveness uses a stdlib `urllib` probe (no `curl`/`requests` dependency), with a 15s start period and 30s interval.
 - **Resource-Tuned Container**: Pinned to 2 CPUs / 4 GB RAM (proxy is I/O-bound) with 10 MB × 3 log rotation.
 - **Patched Streaming Image**: Builds a custom LiteLLM image (`litellm-proxy:patched`) fixing upstream thinking-stream adapter bugs and empty-choices crashes.
@@ -41,13 +41,14 @@ An AI Proxy Gateway that routes **Claude Code** and other clients through **Lite
 
 | Virtual Model Alias         | Backend Deployments                                                                  | Routing & Limits                                                     |
 | :-------------------------- | :----------------------------------------------------------------------------------- | :------------------------------------------------------------------- |
-| `claude-opus-5`             | • `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (Key 1)                             | Single deployment                                                    |
-| `claude-sonnet-5`           | • `openai/hy3` (OpenCode Zen)<br>• `openai/agnes-2.0-flash` (Agnes AI)               | Two deployments                                                      |
-| `claude-haiku-4-5-20251001` | • `nvidia_nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` (Key 2)                 | Single deployment                                                    |
-| `gemini-3.5`                | • `gemini/gemini-3.5-flash-lite` (Key 1)<br>• `gemini/gemini-3.5-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 250K TPM per deployment |
-| `gemini-3.1`                | • `gemini/gemini-3.1-flash-lite` (Key 1)<br>• `gemini/gemini-3.1-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 250K TPM per deployment |
+| `claude-opus-5`             | • `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (Key 1)                             | Single deployment; 40 RPM                                             |
+| `claude-sonnet-5`           | • `openai/agnes-2.5-flash` (Agnes AI)<br>• `openai/sensenova-6.8-flash-lite` (SenseNova) | Load-balanced; 20 RPM per deployment                              |
+| `claude-haiku-4-5-20251001` | • `nvidia_nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` (Key 2)                 | Single deployment; 40 RPM                                             |
+| `gemini-3.5-flash-lite`     | • `gemini/gemini-3.5-flash-lite` (Key 1)<br>• `gemini/gemini-3.5-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 250K TPM per deployment |
+| `gemini-3.1-flash-lite`     | • `gemini/gemini-3.1-flash-lite` (Key 1)<br>• `gemini/gemini-3.1-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 250K TPM per deployment |
+| `minicpm5-2b`               | • `openai/MiniCPM5-2B` (AMD Radeon)                                                  | Single deployment; no declared limits                                 |
 
-**Routing & resilience settings** (`litellm/config.yaml`): `routing_strategy: simple-shuffle`, `num_retries: 2`, `cooldown_time: 60`, `allowed_fails: 2`, `request_timeout: 180` (global cap; per-deployment `timeout` ranges 25–60s, all at or below the cap). Fallback chain: `claude-opus-5` → `gemini-3.5`, `claude-sonnet-5` → `gemini-3.5`, `claude-haiku-4-5-20251001` → `gemini-3.1`.
+**Routing & resilience settings** (`litellm/config.yaml`): `routing_strategy: simple-shuffle`, `num_retries: 2`, `cooldown_time: 60`, `request_timeout: 180` (global cap applied to every deployment — no per-deployment `timeout` or `allowed_fails` overrides are set). Fallback cascade for `claude-opus-5`, `claude-sonnet-5`, and `claude-haiku-4-5-20251001`: `gemini-3.5-flash-lite` → `gemini-3.1-flash-lite` → `minicpm5-2b`.
 
 > Note: because the proxy runs `--num_workers 2`, the cooldown/usage counters are tracked **per worker**, so under concurrent load the effective failover coverage is roughly halved.
 
@@ -76,7 +77,7 @@ An AI Proxy Gateway that routes **Claude Code** and other clients through **Lite
    EOF
    ```
 
-_(Be sure to edit `.env` and add your `BAI_API_KEY`, `NVIDIA_API_KEY_1`, `NVIDIA_API_KEY_2`, `GEMINI_API_KEY_1`, and `GEMINI_API_KEY_2`)_
+_(Be sure to edit `.env` and add your `NVIDIA_API_KEY_1`, `NVIDIA_API_KEY_2`, `AGNES_API_KEY`, `SENSENOVA_API_KEY`, `GEMINI_API_KEY_1`, `GEMINI_API_KEY_2`, and `AMD_API_KEY`)_
 
 3. **Start the proxy stack (builds patched image automatically):**
 
