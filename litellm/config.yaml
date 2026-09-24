@@ -1,7 +1,7 @@
 model_list:
   - model_name: claude-opus-5
     litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b
+      model: nvidia_nim/z-ai/glm-5.3
       api_key: os.environ/NVIDIA_API_KEY_1
       max_parallel_requests: 10
     rpm: 40
@@ -24,7 +24,7 @@ model_list:
 
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
+      model: nvidia_nim/poolside/laguna-xs-2.1
       api_key: os.environ/NVIDIA_API_KEY_2
       max_parallel_requests: 10
     rpm: 40
@@ -72,10 +72,8 @@ router_settings:
   cooldown_time: 60 # Shorter cooldown for transient errors
 
   fallbacks:
-    - claude-opus-5:
-        ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
-    - claude-sonnet-5:
-        ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
+    - claude-opus-5: ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
+    - claude-sonnet-5: ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
     - claude-haiku-4-5-20251001:
         ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
 
