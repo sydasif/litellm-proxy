@@ -29,9 +29,15 @@ model_list:
 
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
-      model: openai/Qwen3.8-27B
-      api_base: https://developer.amd.com.cn/radeon/api/v1
-      api_key: os.environ/AMD_API_KEY
+      model: nvidia_nim/meta/muse-glimmer-30b
+      api_key: os.environ/NVIDIA_API_KEY_1
+      use_chat_completions_api: true
+    rpm: 30
+
+  - model_name: claude-haiku-4-5-20251001
+    litellm_params:
+      model: nvidia_nim/meta/muse-glimmer-30b
+      api_key: os.environ/NVIDIA_API_KEY_2
       use_chat_completions_api: true
     rpm: 30
 
