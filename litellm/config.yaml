@@ -3,21 +3,6 @@ model_list:
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b
       api_key: os.environ/NVIDIA_API_KEY_1
-    rpm: 40
-
-  - model_name: claude-opus-5
-    litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b
-      api_key: os.environ/NVIDIA_API_KEY_2
-    rpm: 40
-
-  - model_name: claude-sonnet-5
-    litellm_params:
-      model: openai/agnes-2.5-flash
-      api_base: https://apihub.agnes-ai.com/v1
-      api_key: os.environ/AGNES_API_KEY
-      use_chat_completions_api: true
-    rpm: 20
 
   - model_name: claude-sonnet-5
     litellm_params:
@@ -25,7 +10,6 @@ model_list:
       api_base: https://token.sensenova.ai/v1
       api_key: os.environ/SENSENOVA_API_KEY
       use_chat_completions_api: true
-    rpm: 20
 
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
@@ -43,7 +27,20 @@ model_list:
     rpm: 15
     tpm: 250000
 
-  - model_name: claude-haiku-4-5-20251001
+  # backup models for fallback routing
+  - model_name: nemotron-3-super-120b-a12b
+    litellm_params:
+      model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b
+      api_key: os.environ/NVIDIA_API_KEY_2
+
+  - model_name: agnes-2.5-flash
+    litellm_params:
+      model: openai/agnes-2.5-flash
+      api_base: https://apihub.agnes-ai.com/v1
+      api_key: os.environ/AGNES_API_KEY
+      use_chat_completions_api: true
+
+  - model_name: gemini-3.1-flash-lite
     litellm_params:
       model: gemini/gemini-3.1-flash-lite
       api_key: os.environ/GEMINI_API_KEY_1
@@ -51,7 +48,7 @@ model_list:
     rpm: 15
     tpm: 250000
 
-  - model_name: claude-haiku-4-5-20251001
+  - model_name: gemini-3.1-flash-lite
     litellm_params:
       model: gemini/gemini-3.1-flash-lite
       api_key: os.environ/GEMINI_API_KEY_2
@@ -68,6 +65,11 @@ router_settings:
   routing_strategy: simple-shuffle
   num_retries: 2 # Retry twice before tripping fallback
   cooldown_time: 60 # Shorter cooldown for transient errors
+
+fallbacks:
+  - claude-opus-5: ["nemotron-3-super-120b-a12b"]
+  - claude-sonnet-5: ["agnes-2.5-flash"]
+  - claude-haiku-4-5-20251001: ["gemini-3.1-flash-lite"]
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
