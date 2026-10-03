@@ -1,7 +1,7 @@
 model_list:
   - model_name: claude-opus-5
     litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b
+      model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
       api_key: os.environ/NVIDIA_API_KEY_1
 
   - model_name: claude-sonnet-5
@@ -43,11 +43,14 @@ model_list:
     rpm: 15
     tpm: 250000
 
-  # backup models for fallback routing
-  - model_name: nemotron-3-super-120b-a12b
+  # last-resort fallback tier: a third provider (AMD Radeon), so no rung of
+  # the cascade is ever the same backend as the tier above it
+  - model_name: minicpm5-2b
     litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b
-      api_key: os.environ/NVIDIA_API_KEY_2
+      model: openai/MiniCPM5-2B
+      api_base: https://developer.amd.com.cn/radeon/api/v1
+      api_key: os.environ/AMD_API_KEY
+      use_chat_completions_api: true
 
 litellm_settings:
   drop_params: true
@@ -60,8 +63,9 @@ router_settings:
   cooldown_time: 60 # Shorter cooldown for transient errors
 
 fallbacks:
-  - claude-opus-5: ["nemotron-3-super-120b-a12b"]
-  - claude-sonnet-5: ["nemotron-3-super-120b-a12b"]
+  - claude-opus-5: ["claude-haiku-4-5-20251001", "minicpm5-2b"]
+  - claude-sonnet-5: ["claude-haiku-4-5-20251001", "minicpm5-2b"]
+  - claude-haiku-4-5-20251001: ["minicpm5-2b"]
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
