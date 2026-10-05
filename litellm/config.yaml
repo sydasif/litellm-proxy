@@ -3,6 +3,15 @@ model_list:
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
       api_key: os.environ/NVIDIA_API_KEY_1
+    order: 1
+    rpm: 40
+
+  - model_name: claude-opus-5
+    litellm_params:
+      model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
+      api_key: os.environ/NVIDIA_API_KEY_2
+    order: 2
+    rpm: 40
 
   - model_name: claude-sonnet-5
     litellm_params:
