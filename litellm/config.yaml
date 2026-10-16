@@ -61,6 +61,18 @@ model_list:
     rpm: 15
     tpm: 250000
 
+  - model_name: nemotron-3.5-super
+    litellm_params:
+      model: nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b
+      api_key: os.environ/NVIDIA_API_KEY_1
+    rpm: 40
+
+  - model_name: nemotron-3.5-super
+    litellm_params:
+      model: nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b
+      api_key: os.environ/NVIDIA_API_KEY_2
+    rpm: 40
+
 litellm_settings:
   drop_params: true
   use_chat_completions_url_for_anthropic_messages: true
@@ -72,9 +84,9 @@ router_settings:
   cooldown_time: 60 # Shorter cooldown for transient errors
 
 fallbacks:
-  - claude-opus-5: ["claude-sonnet-5", "claude-haiku-4-5-20251001"]
-  - claude-sonnet-5: ["claude-opus-5", "claude-haiku-4-5-20251001"]
-  - claude-haiku-4-5-20251001: ["claude-opus-5", "claude-sonnet-5"]
+  - claude-opus-5: ["nemotron-3.5-super", "claude-haiku-4-5-20251001"]
+  - claude-sonnet-5: ["nemotron-3.5-super", "claude-haiku-4-5-20251001"]
+  - claude-haiku-4-5-20251001: ["nemotron-3.5-super"]
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
