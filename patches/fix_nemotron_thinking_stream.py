@@ -27,6 +27,17 @@ Three defects are corrected in the installed litellm package:
    the dropped text and re-emit it as a text_delta in a new text block on the
    next iteration.
 
+NOT APPLIED AT 1.105.1: upstream fixed all four defects (split of combined
+reasoning+content chunks, first block opened from the classified type, and the
+empty-choices guard — see patches/verify_upstream_anthropic_streaming.py and
+CLAUDE.md -> "Patched Image"). This script is kept for anyone pinning the image
+back to <= 1.92.x, where the anchors below still match. Anchor strings are
+exact-source matches, so on any other 1.9x release expect SKIP lines and
+re-target before relying on it.
+
+Every patch function is idempotent: re-running the script on an already-patched
+tree reports ALREADY PATCHED, writes nothing, and still exits 0.
+
 Run from inside the image at build time:
     python3 /app/patches/fix_nemotron_thinking_stream.py
 """
@@ -51,6 +62,15 @@ ADAPTER_DIR = os.path.join(
 
 STREAMING_FILE = os.path.join(ADAPTER_DIR, "streaming_iterator.py")
 TRANSFORM_FILE = os.path.join(ADAPTER_DIR, "transformation.py")
+
+# Idempotency markers: presence of these means the corresponding patch has
+# already been applied, so a re-run is a clean no-op instead of a duplicate
+# insert (and must not be reported as a SKIP/version mismatch).
+RECOVERED_TEXT_DECL = "        self._recovered_text: Optional[str] = None\n"
+RECOVERY_BLOCK_MARKER = "            # Nemotron dual-content recovery: emit delayed text from\n"
+DUAL_CONTENT_DETECT_MARKER = (
+    "                # Nemotron dual-content recovery: when a chunk carries both\n"
+)
 
 
 def _patch_transformation(path: str) -> bool:
@@ -131,9 +151,10 @@ def _patch_transformation(path: str) -> bool:
     )
 
     if old not in src:
-        print(
-            "SKIP transformation.py: target block not found (already patched or version mismatch)"
-        )
+        if new in src:
+            print("ALREADY PATCHED transformation.py: block type detection already reordered")
+            return True
+        print("SKIP transformation.py: target block not found (version mismatch)")
         return False
 
     src = src.replace(old, new)
@@ -158,6 +179,7 @@ def _patch_streaming(path: str) -> bool:
     # no trailing comment) and async __anext__ (24-space indent, trailing
     # "# Reset state for new block" comment). Patch both independently.
     count = 0
+    already = 0
 
     # --- sync path (20-space indent) ---
     sync_old = (
@@ -190,6 +212,8 @@ def _patch_streaming(path: str) -> bool:
     if sync_old in src:
         src = src.replace(sync_old, sync_new)
         count += 1
+    elif sync_new in src:
+        already += 1
 
     # --- async path (24-space indent, "# Reset state" comment) ---
     async_old = (
@@ -224,6 +248,8 @@ def _patch_streaming(path: str) -> bool:
     if async_old in src:
         src = src.replace(async_old, async_new)
         count += 1
+    elif async_new in src:
+        already += 1
 
     # --- Fix _should_start_new_content_block to handle empty choices ---
     # The method accesses chunk.choices[0] without checking if choices is empty.
@@ -248,17 +274,20 @@ def _patch_streaming(path: str) -> bool:
         print(
             "PATCHED streaming_iterator.py: added empty-choices guard in _should_start_new_content_block"
         )
+    elif guard_new in src:
+        already += 1
 
     if count == 0:
-        print(
-            "SKIP streaming_iterator.py transition: target blocks not found (already patched or version mismatch)"
-        )
+        if already:
+            print("ALREADY PATCHED streaming_iterator.py: transition and empty-choices guards present")
+            return True
+        print("SKIP streaming_iterator.py transition: target blocks not found (version mismatch)")
         return False
 
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(src)
     print(
-        f"PATCHED streaming_iterator.py: added thinking_delta/text-block guard in {count} transition path(s)"
+        f"PATCHED streaming_iterator.py: applied {count} guard(s), {already} already present"
     )
     return True
 
@@ -273,6 +302,13 @@ def _patch_streaming_dual_content_recovery(path: str) -> bool:
         src = fh.read()
 
     count = 0
+    already = 0
+
+    # Re-run detection. The four pieces below are independent, so a second pass
+    # must neither duplicate an insert nor be reported as a version mismatch.
+    init_already = RECOVERED_TEXT_DECL in src
+    recovery_already = src.count(RECOVERY_BLOCK_MARKER) >= 2
+    detect_already = DUAL_CONTENT_DETECT_MARKER in src
 
     # --- 1. Add self._recovered_text to __init__ ---
     init_old = "        self.chunk_queue: deque = deque()\n"
@@ -282,9 +318,11 @@ def _patch_streaming_dual_content_recovery(path: str) -> bool:
         "        # chunk carries both reasoning_content and content.\n"
         "        self._recovered_text: Optional[str] = None\n"
     )
-    if init_old in src:
+    if init_old in src and not init_already:
         src = src.replace(init_old, init_new, 1)
         count += 1
+    elif init_already:
+        already += 1
 
     # --- 2. Recovery block in sync __next__ (20-space indent) ---
     sync_recovery_old = (
@@ -331,9 +369,11 @@ def _patch_streaming_dual_content_recovery(path: str) -> bool:
         "            # Queue initial chunks if not sent yet\n"
         "            if self.sent_first_chunk is False:\n"
     )
-    if sync_recovery_old in src:
+    if sync_recovery_old in src and not recovery_already:
         src = src.replace(sync_recovery_old, sync_recovery_new, 1)
         count += 1
+    elif recovery_already:
+        already += 1
 
     # --- 3. Recovery block in async __anext__ (24-space indent) ---
     async_recovery_old = (
@@ -346,7 +386,7 @@ def _patch_streaming_dual_content_recovery(path: str) -> bool:
     )
     # Only replace the second occurrence (inside __anext__) — skip first (__next__ already patched).
     # Use rsplit to target the last occurrence.
-    if async_recovery_old in src:
+    if async_recovery_old in src and not recovery_already:
         idx = src.rfind(async_recovery_old)
         if idx != -1:
             src = (
@@ -419,17 +459,25 @@ def _patch_streaming_dual_content_recovery(path: str) -> bool:
         "                # Check if this is a usage chunk and we have a held stop_reason chunk\n"
     )
     # Two occurrences: sync __next__ and async __anext__. Replace both.
-    if detect_marker in src:
+    if detect_marker in src and not detect_already:
+        count += src.count(detect_marker)
         src = src.replace(detect_marker, detect_recovery)
-        count += 2
+    elif detect_already:
+        already += 1
 
     if count == 0:
-        print("SKIP streaming_iterator.py dual-content recovery: targets not found")
+        if already:
+            print("ALREADY PATCHED streaming_iterator.py: dual-content text recovery present")
+            return True
+        print("SKIP streaming_iterator.py dual-content recovery: targets not found (version mismatch)")
         return False
 
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(src)
-    print(f"PATCHED streaming_iterator.py: added dual-content text recovery ({count} patches)")
+    print(
+        f"PATCHED streaming_iterator.py: added dual-content text recovery "
+        f"({count} patch(es), {already} already present)"
+    )
     return True
 
 
@@ -574,9 +622,10 @@ def _patch_streaming_peek_first_chunk(path: str) -> bool:
 
     count = src.count(old)
     if count == 0:
-        print(
-            "SKIP streaming_iterator.py first-chunk peek: target block not found (already patched or version mismatch)"
-        )
+        if sync_new in src or async_new in src:
+            print("ALREADY PATCHED streaming_iterator.py: first-chunk peek already present")
+            return True
+        print("SKIP streaming_iterator.py first-chunk peek: target block not found (version mismatch)")
         return False
     if count > 2:
         print(
@@ -613,17 +662,25 @@ def _patch_streaming_empty_choices(path: str) -> bool:
                     continue  # skip to next chunk in stream
                 is_final_chunk = chunk.choices[0].finish_reason is not None"""
 
-    if old_line in src:
+    # Idempotency: the target line survives the patch (a guard is inserted
+    # before it), so check for the inserted guard first — otherwise a re-run
+    # would stack a second, duplicate guard on every occurrence.
+    if new_lines in src:
+        print("ALREADY PATCHED streaming_iterator.py: empty-choices guard already present")
+        return True
+
+    occurrences = src.count(old_line)
+    if occurrences:
         src = src.replace(old_line, new_lines)
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(src)
-        print("PATCHED streaming_iterator.py: added empty-choices guard")
-        return True
-    else:
         print(
-            "SKIP streaming_iterator.py empty-choices: target not found (already patched or version mismatch)"
+            f"PATCHED streaming_iterator.py: added empty-choices guard ({occurrences} occurrence(s))"
         )
-        return False
+        return True
+
+    print("SKIP streaming_iterator.py empty-choices: target not found (version mismatch)")
+    return False
 
 
 if __name__ == "__main__":
