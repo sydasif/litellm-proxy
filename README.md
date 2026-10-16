@@ -1,19 +1,5 @@
 # AI Proxy Gateway
 
-<p align="center">
-  <img src="logo.png" alt="LiteLLM Proxy Logo" width="200" height="200">
-</p>
-
-<p align="center">
-  <a href="https://hub.docker.com/r/litellm/litellm"><img src="https://img.shields.io/badge/LiteLLM-blueviolet?style=for-the-badge" alt="LiteLLM"></a>
-  <a href="https://claude.com/product/claude-code"><img src="https://img.shields.io/badge/Claude%20Code-D97757?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code"></a>
-  <a href="https://build.nvidia.com/"><img src="https://img.shields.io/badge/NVIDIA%20NIM-76B900?style=for-the-badge&logo=nvidia&logoColor=white" alt="NVIDIA NIM"></a>
-  <a href="https://ai.google.dev/"><img src="https://img.shields.io/badge/Google%20Gemini-4285F4?style=for-the-badge&logo=googlegemini&logoColor=white" alt="Google Gemini"></a>
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python"></a>
-  <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white" alt="Docker"></a>
-  <a href="https://docs.docker.com/compose/"><img src="https://img.shields.io/badge/docker%20compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Compose"></a>
-</p>
-
 An AI Proxy Gateway that routes **Claude Code** and other clients through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, Agnes AI, SenseNova, Google Gemini) with load balancing and cascading fallbacks. Runs as a **single-worker** instance (`--num_workers 1`, supervised by Gunicorn) so the router's cooldown/usage counters apply to every request — no Postgres/Redis required. Sized at 1 vCPU / 3 GB to leave room on the host for other services.
 
 It is a **single-user** gateway: one Claude Code client, so there is no worker pool to size, no Redis, no admission control and no autoscaling. The point of the routing config here is that a request never hangs and always lands on a model that answers — not throughput.
@@ -41,22 +27,6 @@ Binds on `0.0.0.0:4000`; host network must isolate this port. Runs on the pinned
 
 ---
 
-## Architecture & Model Mapping
-
-| Virtual Model Alias         | Backend Deployments                                                                  | Routing & Limits                                                     |
-| :-------------------------- | :----------------------------------------------------------------------------------- | :------------------------------------------------------------------- |
-| `claude-opus-5`             | • `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (Key 1)<br>• `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (Key 2) | Load-balanced; 40 RPM per deployment; 60s per-attempt timeout |
-| `claude-sonnet-5`           | • `openai/agnes-2.5-flash` (Agnes AI, `AGNES_API_KEY`)<br>• `openai/sensenova-6.8-flash-lite` (SenseNova, `SENSENOVA_API_KEY`) | Load-balanced; 20 RPM per deployment        |
-| `claude-haiku-4-5-20251001` | • `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (Key 1)<br>• `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (Key 2) | Load-balanced; 40 RPM per deployment      |
-| `gemini-3.5-flash-lite`     | • `gemini/gemini-3.5-flash-lite` (Key 1)<br>• `gemini/gemini-3.5-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 250K TPM per deployment |
-| `gemini-3.1-flash-lite`     | • `gemini/gemini-3.1-flash-lite` (Key 1)<br>• `gemini/gemini-3.1-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 250K TPM per deployment |
-
-**Routing & resilience settings** (`litellm/config.yaml`): `routing_strategy: simple-shuffle`, `num_retries: 2`, `cooldown_time: 60`, `request_timeout: 180` (global per-attempt cap; the two `claude-opus-5` deployments tighten it with `timeout: 60` in `litellm_params`). `fallbacks` **must stay nested under `router_settings`** — the proxy builds the router from that block alone, so a top-level `fallbacks:` is silently dropped and failures return "No fallback was attempted" instead of cascading. Fallback cascade for `claude-opus-5`, `claude-sonnet-5`, and `claude-haiku-4-5-20251001`: `gemini-3.5-flash-lite` → `gemini-3.1-flash-lite`. `rpm` is set at deployment level (the router promotes it into `litellm_params`); no `order` keys are set, because litellm only reads `order` from `litellm_params`/`model_info` and a top-level `order` would be silently ignored.
-
-> Note: the proxy runs a single worker, so a cooldown applies gateway-wide. Raising the worker count for throughput would make cooldowns and usage counters per-worker again unless Redis is added.
-
----
-
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) & Docker Compose
@@ -74,13 +44,14 @@ Binds on `0.0.0.0:4000`; host network must isolate this port. Runs on the pinned
    ```
 
 2. **Generate master key and populate `.env` with your provider API keys:**
+
    ```bash
    cat >> .env <<EOF
    LITELLM_MASTER_KEY="sk-$(openssl rand -hex 24)"
    EOF
    ```
 
-_(Be sure to edit `.env` and add your `NVIDIA_API_KEY_1`, `NVIDIA_API_KEY_2`, `AGNES_API_KEY`, `SENSENOVA_API_KEY`, `GEMINI_API_KEY_1`, and `GEMINI_API_KEY_2`)_
+   _(Be sure to edit `.env` and add your `NVIDIA_API_KEY_1`, `NVIDIA_API_KEY_2`, `AGNES_API_KEY`, `SENSENOVA_API_KEY`, `GEMINI_API_KEY_1`, and `GEMINI_API_KEY_2`)_
 
 3. **Start the proxy stack (builds patched image automatically):**
 
@@ -89,6 +60,7 @@ _(Be sure to edit `.env` and add your `NVIDIA_API_KEY_1`, `NVIDIA_API_KEY_2`, `A
    ```
 
 4. **Verify health:**
+
    ```bash
    curl http://localhost:4000/health/liveliness
    curl http://localhost:4000/health/readiness
@@ -128,7 +100,9 @@ curl -X POST http://localhost:4000/v1/chat/completions \
 
 ---
 
-```bash
+## Project Structure
+
+```
 litellm-proxy/
 ├── docker-compose.yml          # Docker Compose configuration (1 gunicorn worker, no DB/Redis; binds 0.0.0.0:4000)
 ├── Dockerfile                  # Builds litellm-proxy:patched with SSE streaming fix
