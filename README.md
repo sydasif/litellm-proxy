@@ -14,23 +14,22 @@
   <a href="https://docs.docker.com/compose/"><img src="https://img.shields.io/badge/docker%20compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Compose"></a>
 </p>
 
-An AI Proxy Gateway that routes **Claude Code** and other clients through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, Agnes AI, SenseNova, Google Gemini, AMD Radeon) with load balancing and cascading fallbacks. Runs as a **multi-worker** instance (`--num_workers 2`) with **per-worker** in-memory state — the router's cooldown/usage counters are not shared across workers (no Postgres/Redis). Binds on `0.0.0.0:4000`; host network must isolate this port.
+An AI Proxy Gateway that routes **Claude Code** and other clients through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, Agnes AI, SenseNova, Google Gemini) with load balancing and cascading fallbacks. Runs as a **multi-worker** instance (`--num_workers 2`) with **per-worker** in-memory state — the router's cooldown/usage counters are not shared across workers (no Postgres/Redis). Binds on `0.0.0.0:4000`; host network must isolate this port. Runs on the pinned `litellm 1.105.1` base image, whose Anthropic streaming adapter is verified at build time against the Nemotron thinking-stream defects that previously required a local source patch.
 
 ---
 
 ## Features
 
-- **Multi-Provider Routing**: Access NVIDIA NIM, Agnes AI, SenseNova, Google Gemini, and AMD Radeon endpoints through unified virtual model names with cascading fallbacks and usage-based load balancing.
-- **Load Balancing**: `simple-shuffle` (`routing_strategy` in `litellm/config.yaml`) routes to the least-utilized deployment per worker. Only `claude-sonnet-5` (Agnes AI + SenseNova) and the two Gemini pools have multiple deployments; `claude-opus-5`, `claude-haiku-4-5-20251001`, and `minicpm5-2b` are single-endpoint, so routing is deterministic there.
+- **Multi-Provider Routing**: Access NVIDIA NIM, Agnes AI, SenseNova, and Google Gemini endpoints through unified virtual model names with cascading fallbacks and usage-based load balancing.
+- **Load Balancing**: `simple-shuffle` (`routing_strategy` in `litellm/config.yaml`) routes to the least-utilized deployment per worker. Every alias holds two deployments — the two NVIDIA NIM aliases use two API keys each, `claude-sonnet-5` pairs Agnes AI with SenseNova, and both Gemini aliases use two keys — so all five spread load across two endpoints.
 - **Cascading Fallbacks**: every Claude alias follows the same ordered cascade —
   1. `gemini-3.5-flash-lite`
   2. `gemini-3.1-flash-lite`
-  3. `minicpm5-2b`
 - **Parameter Normalization**: Drops unsupported parameters (`drop_params: true`) for cross-provider compatibility.
 - **Tool Compatibility**: Automatically strips `strict: null` from tool definitions (`additional_drop_params` on every Gemini deployment) for backends that reject non-boolean values.
 - **Lean Health Check**: Container liveness uses a stdlib `urllib` probe (no `curl`/`requests` dependency), with a 15s start period and 30s interval.
 - **Resource-Tuned Container**: Pinned to 2 CPUs / 4 GB RAM (proxy is I/O-bound) with 10 MB × 3 log rotation.
-- **Patched Streaming Image**: Builds a custom LiteLLM image (`litellm-proxy:patched`) fixing upstream thinking-stream adapter bugs and empty-choices crashes.
+- **Build-Gated Streaming Image**: Builds `litellm-proxy:patched` on the pinned `litellm 1.105.1` base image, where the Nemotron thinking-stream defects that used to need a local source patch are fixed upstream. The build replays the failing chunk shape against the installed adapter and aborts if the behavior regresses.
 - **Multi-Worker Design**: Runs 2 uvicorn workers via `--num_workers 2` — in-memory state (router cooldowns, usage counters, request spend) is **per-worker**, not shared. No external database, Redis, or UI required.
 - **Health Checks**: Liveness (`/health/liveliness`) and readiness (`/health/readiness`) endpoints.
 - **Lean Build Context**: `.dockerignore` excludes `.env`, `.env.*`, `.git/`, `.claude/`, all markdown (`*.md`), images (`logo.png`), docker compose files (`docker-compose*.yml`), and caches from the Docker build context.
@@ -41,14 +40,13 @@ An AI Proxy Gateway that routes **Claude Code** and other clients through **Lite
 
 | Virtual Model Alias         | Backend Deployments                                                                  | Routing & Limits                                                     |
 | :-------------------------- | :----------------------------------------------------------------------------------- | :------------------------------------------------------------------- |
-| `claude-opus-5`             | • `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (Key 1)                             | Single deployment; 40 RPM                                             |
-| `claude-sonnet-5`           | • `openai/agnes-2.5-flash` (Agnes AI)<br>• `openai/sensenova-6.8-flash-lite` (SenseNova) | Load-balanced; 20 RPM per deployment                              |
-| `claude-haiku-4-5-20251001` | • `nvidia_nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` (Key 2)                 | Single deployment; 40 RPM                                             |
+| `claude-opus-5`             | • `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (Key 1)<br>• `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (Key 2) | Load-balanced; 40 RPM per deployment                  |
+| `claude-sonnet-5`           | • `openai/agnes-2.5-flash` (Agnes AI, `AGNES_API_KEY`)<br>• `openai/sensenova-6.8-flash-lite` (SenseNova, `SENSENOVA_API_KEY`) | Load-balanced; 20 RPM per deployment        |
+| `claude-haiku-4-5-20251001` | • `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (Key 1)<br>• `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (Key 2) | Load-balanced; 40 RPM per deployment      |
 | `gemini-3.5-flash-lite`     | • `gemini/gemini-3.5-flash-lite` (Key 1)<br>• `gemini/gemini-3.5-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 250K TPM per deployment |
 | `gemini-3.1-flash-lite`     | • `gemini/gemini-3.1-flash-lite` (Key 1)<br>• `gemini/gemini-3.1-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 250K TPM per deployment |
-| `minicpm5-2b`               | • `openai/MiniCPM5-2B` (AMD Radeon)                                                  | Single deployment; no declared limits                                 |
 
-**Routing & resilience settings** (`litellm/config.yaml`): `routing_strategy: simple-shuffle`, `num_retries: 2`, `cooldown_time: 60`, `request_timeout: 180` (global cap applied to every deployment — no per-deployment `timeout` or `allowed_fails` overrides are set). Fallback cascade for `claude-opus-5`, `claude-sonnet-5`, and `claude-haiku-4-5-20251001`: `gemini-3.5-flash-lite` → `gemini-3.1-flash-lite` → `minicpm5-2b`.
+**Routing & resilience settings** (`litellm/config.yaml`): `routing_strategy: simple-shuffle`, `num_retries: 2`, `cooldown_time: 60`, `request_timeout: 180` (global cap applied to every deployment — no per-deployment `timeout` or `allowed_fails` overrides are set). Fallback cascade for `claude-opus-5`, `claude-sonnet-5`, and `claude-haiku-4-5-20251001`: `gemini-3.5-flash-lite` → `gemini-3.1-flash-lite`. `rpm` is set at deployment level (the router promotes it into `litellm_params`); no `order` keys are set, because litellm only reads `order` from `litellm_params`/`model_info` and a top-level `order` would be silently ignored.
 
 > Note: because the proxy runs `--num_workers 2`, the cooldown/usage counters are tracked **per worker**, so under concurrent load the effective failover coverage is roughly halved.
 
@@ -77,7 +75,7 @@ An AI Proxy Gateway that routes **Claude Code** and other clients through **Lite
    EOF
    ```
 
-_(Be sure to edit `.env` and add your `NVIDIA_API_KEY_1`, `NVIDIA_API_KEY_2`, `AGNES_API_KEY`, `SENSENOVA_API_KEY`, `GEMINI_API_KEY_1`, `GEMINI_API_KEY_2`, and `AMD_API_KEY`)_
+_(Be sure to edit `.env` and add your `NVIDIA_API_KEY_1`, `NVIDIA_API_KEY_2`, `AGNES_API_KEY`, `SENSENOVA_API_KEY`, `GEMINI_API_KEY_1`, and `GEMINI_API_KEY_2`)_
 
 3. **Start the proxy stack (builds patched image automatically):**
 
@@ -131,7 +129,8 @@ litellm-proxy/
 ├── Dockerfile                  # Builds litellm-proxy:patched with SSE streaming fix
 ├── .dockerignore               # Keeps .env, .git, docs, caches out of the build context
 ├── patches/
-│   └── fix_nemotron_thinking_stream.py  # LiteLLM SSE thinking/streaming adapter patch
+│   ├── verify_upstream_anthropic_streaming.py  # Build gate: replays the Nemotron stream shape
+│   └── fix_nemotron_thinking_stream.py         # Legacy source patch (<=1.92.x layout, not applied)
 ├── litellm/
 │   └── config.yaml             # Router and provider settings
 ├── .env.example                # Template for environment variables
@@ -147,7 +146,8 @@ litellm-proxy/
 | Update API keys          | Edit `.env` file, then restart                                    |
 | Modify routing/providers | Edit `litellm/config.yaml`, then restart                          |
 | Restart proxy            | `docker compose down && docker compose up -d`                     |
-| Rebuild patched image    | `docker compose build --no-cache litellm && docker compose up -d` |
+| Rebuild image            | `docker compose build --no-cache litellm && docker compose up -d` |
+| Run the streaming gate   | `python3 patches/verify_upstream_anthropic_streaming.py`          |
 | View logs                | `docker compose logs -f`                                          |
 
 ---
