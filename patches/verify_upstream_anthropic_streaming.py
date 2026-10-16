@@ -25,7 +25,8 @@ indexed. The local patch is therefore no longer applied.
 This script is the build-time gate that keeps that claim honest: it drives the
 installed adapter with the exact Nemotron chunk shape that used to break
 Claude Code and fails the build if any invariant regresses. Re-run it (and
-re-read the "Patched Image" section of CLAUDE.md) on every base-image bump.
+re-read the "Image pin & streaming verification" section of CLAUDE.md) on every
+base-image bump.
 
 Run from inside the image at build time:
     python3 /app/patches/verify_upstream_anthropic_streaming.py
@@ -195,7 +196,7 @@ def main() -> int:
     if not ok:
         print(
             "\nThe installed litellm no longer produces the stream this image expects.\n"
-            "Re-read the 'Patched Image' section of CLAUDE.md: a base-image bump may\n"
+            "Re-read 'Image pin & streaming verification' in CLAUDE.md: a base-image bump may\n"
             "have reintroduced one of the four Nemotron streaming defects, in which\n"
             "case patches/fix_nemotron_thinking_stream.py has to be re-targeted to the\n"
             "new adapter sources and applied again."

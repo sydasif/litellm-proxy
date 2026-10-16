@@ -8,7 +8,7 @@ FROM docker.litellm.ai/berriai/litellm:1.105.1
 
 # Pinned to a specific release for reproducible builds. Bump this tag only
 # together with re-running the verification step below (it exits non-zero on
-# drift) and re-reading CLAUDE.md -> "Patched Image".
+# drift) and re-reading CLAUDE.md -> "Image pin & streaming verification".
 #
 # HISTORY: litellm 1.92.0 shipped four defects in its Anthropic /v1/messages
 # streaming adapter that broke Claude Code with "Content block is not a thinking

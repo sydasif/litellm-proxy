@@ -30,10 +30,10 @@ Three defects are corrected in the installed litellm package:
 NOT APPLIED AT 1.105.1: upstream fixed all four defects (split of combined
 reasoning+content chunks, first block opened from the classified type, and the
 empty-choices guard — see patches/verify_upstream_anthropic_streaming.py and
-CLAUDE.md -> "Patched Image"). This script is kept for anyone pinning the image
-back to <= 1.92.x, where the anchors below still match. Anchor strings are
-exact-source matches, so on any other 1.9x release expect SKIP lines and
-re-target before relying on it.
+CLAUDE.md -> "Image pin & streaming verification"). This script is kept for
+anyone pinning the image back to <= 1.92.x, where the anchors below still
+match. Anchor strings are exact-source matches, so on any other 1.9x release
+expect SKIP lines and re-target before relying on it.
 
 Every patch function is idempotent: re-running the script on an already-patched
 tree reports ALREADY PATCHED, writes nothing, and still exits 0.
