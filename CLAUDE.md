@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, Agnes AI, SenseNova, Google Gemini) with load balancing and cascading fallbacks. Runs as a multi-worker instance (`--num_workers 2`) with **per-worker** in-memory state — the router's cooldown/usage counters are not shared across workers (no Postgres/Redis). Binds on `0.0.0.0:4000` (host network must isolate this port). Uses Docker Compose to deploy a pinned LiteLLM image (`1.105.1`) whose Anthropic streaming adapter is verified at build time against the Nemotron thinking-stream defects that previously required a local source patch.
+AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, Agnes AI, SenseNova, Google Gemini) with load balancing and cascading fallbacks. Runs as a **single-worker** instance (`--num_workers 1`, supervised by Gunicorn via `--run_gunicorn`), so the router's cooldown/usage counters are shared by every request — no Postgres/Redis is needed to make them coherent. Sized to leave room on the host: 1 vCPU / 3 GB. Binds on `0.0.0.0:4000` (host network must isolate this port). Uses Docker Compose to deploy a pinned LiteLLM image (`1.105.1`) whose Anthropic streaming adapter is verified at build time against the Nemotron thinking-stream defects that previously required a local source patch.
 
 ## Architecture
 
@@ -14,11 +14,13 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 
 | Virtual Model               | Deployment 1                                                               | Deployment 2                                                    |
 | --------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `claude-opus-5`             | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (key 1, RPM 40)             | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (key 2, RPM 40)  |
+| `claude-opus-5`             | `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (`timeout: 60`, key 1, RPM 40) | `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (`timeout: 60`, key 2, RPM 40) |
 | `claude-sonnet-5`           | `openai/agnes-2.5-flash` (Agnes AI, `AGNES_API_KEY`, RPM 20)               | `openai/sensenova-6.8-flash-lite` (SenseNova, `SENSENOVA_API_KEY`, RPM 20) |
 | `claude-haiku-4-5-20251001` | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 1, RPM 40)        | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 2, RPM 40) |
 | `gemini-3.5-flash-lite`     | `gemini/gemini-3.5-flash-lite` (key 1, RPM 15, TPM 250K)                   | `gemini/gemini-3.5-flash-lite` (key 2, RPM 15, TPM 250K)        |
 | `gemini-3.1-flash-lite`     | `gemini/gemini-3.1-flash-lite` (key 1, RPM 15, TPM 250K)                   | `gemini/gemini-3.1-flash-lite` (key 2, RPM 15, TPM 250K)        |
+
+> **Why opus is not on `nemotron-3-ultra-550b-a55b`:** NIM lists that model but never answers it — the request is accepted and the socket then stays silent (0 bytes in 90s on a raw TLS connection; httpx `ReadTimeout` at 20s, 3/3; OpenAI SDK `APITimeoutError` at 30s), while `super-120b` answers the same call in ~1s. Through the proxy that stall surfaced as an unbounded Claude Code hang: **700s with zero response bytes**, on both `/v1/messages` and `/v1/chat/completions`, streaming and non-streaming, and with **no error ever raised** — so no fallback could fire. If you repoint opus back to an ultra model, test it first (see Testing).
 
 **Fallback chain (when primary deployments fail):** all three Claude aliases share the same ordered cascade:
 
@@ -27,13 +29,18 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 
 **Full failover cascade:** `opus/sonnet/haiku → gemini-3.5-flash-lite → gemini-3.1-flash-lite`
 
-**Load balancing & failover:** `routing_strategy: simple-shuffle` routes to the least-utilized deployment per worker; `num_retries: 2` adds per-call retries within a model's deployment pool before escalating to the fallback model; `cooldown_time: 60` marks a failing deployment unhealthy for 60s. There is no `allowed_fails` or `retry_after` key in the config, so LiteLLM's defaults apply for those. All five pools hold two deployments, so `simple-shuffle` spreads load across both endpoints of each (verified against a live `litellm.Router`: both keys of `claude-opus-5` and of `claude-haiku-4-5-20251001`, and both providers of `claude-sonnet-5`, are returned across successive picks).
+**Load balancing & failover:** `routing_strategy: simple-shuffle` routes to the least-utilized deployment; `num_retries: 2` adds per-call retries within a model's deployment pool before escalating to the fallback model; `cooldown_time: 60` marks a failing deployment unhealthy for 60s. `allowed_fails: 3` states LiteLLM's documented default explicitly (fails per minute before a deployment is cooled down for `cooldown_time`); there is no `retry_after` key. All five pools hold two deployments, so `simple-shuffle` spreads load across both endpoints of each (verified against a live `litellm.Router`: both keys of `claude-opus-5` and of `claude-haiku-4-5-20251001`, and both providers of `claude-sonnet-5`, are returned across successive picks).
 
 > **`rpm` vs `order` placement (both used to sit at the top level of a deployment):** litellm promotes a top-level `rpm` (and `tpm`) into `litellm_params` at router init, so `rpm: 40` at deployment level works. It does **not** do that for `order`: `litellm.utils._get_deployment_order` reads `litellm_params.order` then `model_info.order` only, so a top-level `order` was silently inert and has been removed from the config. To hold a key as a hot standby instead of a load-balanced peer, put `order` **inside** `litellm_params` of that deployment.
 
-> Note: because the proxy runs `--num_workers 2`, the cooldown/usage counters are tracked **per worker**, so under concurrent load the effective failover coverage is roughly halved.
+> Note: the proxy runs a **single** worker, so a cooldown or usage decision applies to the whole gateway rather than to one process in two. If the worker count is ever raised (for throughput), that coherence is lost: cooldowns and usage counters become per-worker again unless Redis is added, roughly halving effective failover coverage under concurrent load.
 
-**Resilience:** `request_timeout: 180` in `litellm_settings` aborts upstream calls that hang past 180 seconds, preventing cascading stalls. No per-deployment `timeout` overrides are set in `litellm/config.yaml`, so the 180s global cap applies to every deployment.
+**Resilience:** `request_timeout: 180` in `litellm_settings` is the global per-attempt cap, and the two `claude-opus-5` deployments tighten it with `timeout: 60` in `litellm_params` (a per-attempt read timeout, placed there for the same reason `order` must be — see the note in Architecture). Two things make the global cap alone insufficient:
+
+1. **The client waits out every attempt.** `router_settings.num_retries: 2` means up to **3 attempts at the effective timeout** before the fallback chain is even reached. litellm disables the OpenAI SDK's own retries on router calls — `main.py` sets `max_retries = 0` as soon as it sees a `model_group` in the request metadata, so the SDK layer does not multiply the wait. Measured against a deliberately silent provider with `timeout: 20`: the client waited **74.5s** (3 × 20s + Gemini) and then received a `200` from `gemini-3.5-flash-lite`. Worst-case silence is therefore ≈ `(num_retries + 1) × timeout + fallback latency`; with the 180s global and no per-deployment cap that is ~9 minutes.
+2. **`fallbacks` only fire on an error.** A provider that stalls without ever erroring is never rescued — with only the global cap in place, a stalled opus held the client connection open for the full **700s** measured below. A per-deployment timeout converts a stall into a fast, fallback-able failure: the same silent-provider test ended on `gemini-3.5-flash-lite` instead of never. (Both failure shapes verified end to end — a fast NIM 400 and a black-holed primary each completed from the Gemini cascade.)
+
+> **`stream_timeout` does not help on `/v1/messages`.** litellm's docs offer `stream_timeout` (per deployment) as the first-chunk cap that "aborts hanging providers and retries another model". Against a black-holed primary on this pin, `stream_timeout: 5` did **not** cut the stall — a streaming request through `/v1/messages` still held the client for the full 240s cap — while the deployment-level `timeout` did bound it. On the Anthropic route Claude Code uses, `timeout` (per deployment) and `request_timeout` (global) are the levers that work; treat `stream_timeout` as untested here.
 
 ## Image pin & streaming verification (Nemotron thinking-stream)
 
@@ -111,15 +118,17 @@ Source of truth for routing and provider settings. Key behaviors:
 
 **`litellm_settings`:** `drop_params: true`, `use_chat_completions_url_for_anthropic_messages: true`, `request_timeout: 180` (aborts hung upstream requests). No Redis.
 
-**`router_settings`:** `routing_strategy: simple-shuffle` (least-utilized deployment per worker), `num_retries: 2` (per-call retries within a deployment pool before escalating), `cooldown_time: 60` (seconds a failed deployment stays unhealthy). Fallback chain set via `fallbacks` (identical two-model cascade for all Claude aliases). No Redis, and no `allowed_fails`, `retry_after`, or per-deployment `timeout` keys.
+**`router_settings`:** `routing_strategy: simple-shuffle` (least-utilized deployment), `num_retries: 2` (per-call retries within a deployment pool before escalating), `cooldown_time: 60` (seconds a failed deployment stays unhealthy), `allowed_fails: 3` (fails per minute before that cooldown applies), and `fallbacks` (identical two-model cascade for all Claude aliases). No Redis, and no `retry_after` key.
+
+> **`fallbacks` placement — keep it under `router_settings`.** `proxy_server.load_config()` builds the router from the **`router_settings` block only**: it iterates `config["router_settings"]` and forwards the keys that are valid `litellm.Router` args. `fallbacks` is such an arg, so a *top-level* `fallbacks:` parses fine, passes YAML validation, and is then **silently dropped** — the router gets `fallbacks=None` and every upstream failure reaches the client as "... failed with the error above. No fallback was attempted." Verified by reproducing the loader's router assembly: top-level → `router.fallbacks is None`; nested → `claude-opus-5` resolves to `['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']`. This is the same failure mode as the top-level `order` keys in the note above.
 
 **`rpm` placement:** top-level on each deployment (the router promotes it into `litellm_params`). **No `order` keys** — see the note in Architecture; a top-level `order` is ignored by litellm.
 
-**Per-deployment extra params:** the `claude-sonnet-5` deployments (Agnes AI, SenseNova) set `use_chat_completions_api: true` with an explicit `api_base` and their own keys (`AGNES_API_KEY`, `SENSENOVA_API_KEY`); the Gemini and NVIDIA NIM deployments rely on provider defaults.
+**Per-deployment extra params:** the `claude-sonnet-5` deployments (Agnes AI, SenseNova) set `use_chat_completions_api: true` with an explicit `api_base` and their own keys (`AGNES_API_KEY`, `SENSENOVA_API_KEY`); the two `claude-opus-5` deployments set `timeout: 60`; the Gemini and remaining NVIDIA NIM deployments rely on provider defaults.
 
 **`additional_drop_params: ["tools[*].strict"]`** — Applied to all Gemini deployments. Strips `strict: null` from tool definitions before sending to backends that reject non-boolean values (fixes 400 validation errors from providers that apply strict type validation).
 
-**`general_settings`:** `master_key` auth. No `database_url` — single-instance, no PostgreSQL. Virtual keys/budgets/spend reports are in-memory only.
+**`general_settings`:** `master_key` auth, plus `trusted_proxy_ranges: []` (clients connect directly; also silences the login-throttle warning at startup) and `background_health_checks: true` with `health_check_interval: 300` so `/health` serves a cached state instead of probing every deployment per call. No `database_url` — single-instance, no PostgreSQL. Virtual keys/budgets/spend reports are in-memory only.
 
 ## Testing
 
@@ -154,8 +163,8 @@ curl -s http://localhost:4000/v1/model/info \
 # Note: pools now use simple-shuffle. `claude-opus-5`, `claude-sonnet-5`,
 # `claude-haiku-4-5-20251001`, `gemini-3.5-flash-lite` and
 # `gemini-3.1-flash-lite` each have two deployments, so all five should vary.
-# However, with --num_workers 2, counters are per-worker, so concurrent requests may not show
-# perfect round-robin behavior.
+# Counters live in the single worker process, so these picks are coordinated across the
+# whole gateway rather than per process.
 for i in {1..6}; do
   curl -s -D - http://0.0.0.0:4000/v1/chat/completions \
     -H "Content-Type: application/json" \

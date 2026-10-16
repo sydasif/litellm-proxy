@@ -14,7 +14,7 @@
   <a href="https://docs.docker.com/compose/"><img src="https://img.shields.io/badge/docker%20compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Compose"></a>
 </p>
 
-An AI Proxy Gateway that routes **Claude Code** and other clients through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, Agnes AI, SenseNova, Google Gemini) with load balancing and cascading fallbacks. Runs as a **multi-worker** instance (`--num_workers 2`) with **per-worker** in-memory state — the router's cooldown/usage counters are not shared across workers (no Postgres/Redis). Binds on `0.0.0.0:4000`; host network must isolate this port. Runs on the pinned `litellm 1.105.1` base image, whose Anthropic streaming adapter is verified at build time against the Nemotron thinking-stream defects that previously required a local source patch.
+An AI Proxy Gateway that routes **Claude Code** and other clients through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, Agnes AI, SenseNova, Google Gemini) with load balancing and cascading fallbacks. Runs as a **single-worker** instance (`--num_workers 1`, supervised by Gunicorn) so the router's cooldown/usage counters apply to every request — no Postgres/Redis required. Sized at 1 vCPU / 3 GB to leave room on the host for other services. Binds on `0.0.0.0:4000`; host network must isolate this port. Runs on the pinned `litellm 1.105.1` base image, whose Anthropic streaming adapter is verified at build time against the Nemotron thinking-stream defects that previously required a local source patch.
 
 ---
 
@@ -27,10 +27,11 @@ An AI Proxy Gateway that routes **Claude Code** and other clients through **Lite
   2. `gemini-3.1-flash-lite`
 - **Parameter Normalization**: Drops unsupported parameters (`drop_params: true`) for cross-provider compatibility.
 - **Tool Compatibility**: Automatically strips `strict: null` from tool definitions (`additional_drop_params` on every Gemini deployment) for backends that reject non-boolean values.
-- **Lean Health Check**: Container liveness uses a stdlib `urllib` probe (no `curl`/`requests` dependency), with a 15s start period and 30s interval.
-- **Resource-Tuned Container**: Pinned to 2 CPUs / 4 GB RAM (proxy is I/O-bound) with 10 MB × 3 log rotation.
+- **Lean Health Check**: Container liveness uses a stdlib `urllib` probe (no `curl`/`requests` dependency), with a 180s start period (a cold start measured 129s) and 30s interval.
+- **Resource-Tuned Container**: Pinned to 1 CPU / 3 GB RAM — measured at 1.05 GB idle and 1.40 GB under mixed traffic, since LiteLLM's 4 GB-per-worker floor is driven by its database engine and this deployment runs none — with 10 MB × 3 log rotation.
+- **Gunicorn-Supervised Worker**: `--run_gunicorn`, because uvicorn's own multiprocess manager pings each child with a hard-coded 5s timeout and kills workers that are still importing LiteLLM (measured: a 2-worker uvicorn boot killed 14 workers and took 129s to first liveliness, against 29s under Gunicorn).
 - **Build-Gated Streaming Image**: Builds `litellm-proxy:patched` on the pinned `litellm 1.105.1` base image, where the Nemotron thinking-stream defects that used to need a local source patch are fixed upstream. The build replays the failing chunk shape against the installed adapter and aborts if the behavior regresses.
-- **Multi-Worker Design**: Runs 2 uvicorn workers via `--num_workers 2` — in-memory state (router cooldowns, usage counters, request spend) is **per-worker**, not shared. No external database, Redis, or UI required.
+- **Single-Worker Design**: One worker process (`--num_workers 1`) under Gunicorn. In-memory state (router cooldowns, usage counters, request spend) is shared by every request, which the multi-worker setup could not do without Redis. No external database, Redis, or UI required.
 - **Health Checks**: Liveness (`/health/liveliness`) and readiness (`/health/readiness`) endpoints.
 - **Lean Build Context**: `.dockerignore` excludes `.env`, `.env.*`, `.git/`, `.claude/`, all markdown (`*.md`), images (`logo.png`), docker compose files (`docker-compose*.yml`), and caches from the Docker build context.
 
@@ -40,15 +41,15 @@ An AI Proxy Gateway that routes **Claude Code** and other clients through **Lite
 
 | Virtual Model Alias         | Backend Deployments                                                                  | Routing & Limits                                                     |
 | :-------------------------- | :----------------------------------------------------------------------------------- | :------------------------------------------------------------------- |
-| `claude-opus-5`             | • `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (Key 1)<br>• `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (Key 2) | Load-balanced; 40 RPM per deployment                  |
+| `claude-opus-5`             | • `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (Key 1)<br>• `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (Key 2) | Load-balanced; 40 RPM per deployment; 60s per-attempt timeout |
 | `claude-sonnet-5`           | • `openai/agnes-2.5-flash` (Agnes AI, `AGNES_API_KEY`)<br>• `openai/sensenova-6.8-flash-lite` (SenseNova, `SENSENOVA_API_KEY`) | Load-balanced; 20 RPM per deployment        |
 | `claude-haiku-4-5-20251001` | • `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (Key 1)<br>• `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (Key 2) | Load-balanced; 40 RPM per deployment      |
 | `gemini-3.5-flash-lite`     | • `gemini/gemini-3.5-flash-lite` (Key 1)<br>• `gemini/gemini-3.5-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 250K TPM per deployment |
 | `gemini-3.1-flash-lite`     | • `gemini/gemini-3.1-flash-lite` (Key 1)<br>• `gemini/gemini-3.1-flash-lite` (Key 2) | Load-balanced; declarative limit of 15 RPM / 250K TPM per deployment |
 
-**Routing & resilience settings** (`litellm/config.yaml`): `routing_strategy: simple-shuffle`, `num_retries: 2`, `cooldown_time: 60`, `request_timeout: 180` (global cap applied to every deployment — no per-deployment `timeout` or `allowed_fails` overrides are set). Fallback cascade for `claude-opus-5`, `claude-sonnet-5`, and `claude-haiku-4-5-20251001`: `gemini-3.5-flash-lite` → `gemini-3.1-flash-lite`. `rpm` is set at deployment level (the router promotes it into `litellm_params`); no `order` keys are set, because litellm only reads `order` from `litellm_params`/`model_info` and a top-level `order` would be silently ignored.
+**Routing & resilience settings** (`litellm/config.yaml`): `routing_strategy: simple-shuffle`, `num_retries: 2`, `cooldown_time: 60`, `request_timeout: 180` (global per-attempt cap; the two `claude-opus-5` deployments tighten it with `timeout: 60` in `litellm_params`). `fallbacks` **must stay nested under `router_settings`** — the proxy builds the router from that block alone, so a top-level `fallbacks:` is silently dropped and failures return "No fallback was attempted" instead of cascading. Fallback cascade for `claude-opus-5`, `claude-sonnet-5`, and `claude-haiku-4-5-20251001`: `gemini-3.5-flash-lite` → `gemini-3.1-flash-lite`. `rpm` is set at deployment level (the router promotes it into `litellm_params`); no `order` keys are set, because litellm only reads `order` from `litellm_params`/`model_info` and a top-level `order` would be silently ignored.
 
-> Note: because the proxy runs `--num_workers 2`, the cooldown/usage counters are tracked **per worker**, so under concurrent load the effective failover coverage is roughly halved.
+> Note: the proxy runs a single worker, so a cooldown applies gateway-wide. Raising the worker count for throughput would make cooldowns and usage counters per-worker again unless Redis is added.
 
 ---
 
@@ -125,7 +126,7 @@ curl -X POST http://localhost:4000/v1/chat/completions \
 
 ```bash
 litellm-proxy/
-├── docker-compose.yml          # Docker Compose configuration (2 workers, no DB/Redis; binds 0.0.0.0:4000)
+├── docker-compose.yml          # Docker Compose configuration (1 gunicorn worker, no DB/Redis; binds 0.0.0.0:4000)
 ├── Dockerfile                  # Builds litellm-proxy:patched with SSE streaming fix
 ├── .dockerignore               # Keeps .env, .git, docs, caches out of the build context
 ├── patches/
