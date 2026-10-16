@@ -1,16 +1,19 @@
 model_list:
+  # rpm is a router-level key and is promoted into litellm_params at init, so
+  # top-level placement is fine. `order` would NOT be: litellm reads it from
+  # litellm_params (or model_info) only, so a top-level `order` is silently
+  # ignored and the pool is load-balanced. Put it inside litellm_params if you
+  # ever want key 2 held as a hot standby instead of a load-balanced peer.
   - model_name: claude-opus-5
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
       api_key: os.environ/NVIDIA_API_KEY_1
-    order: 1
     rpm: 40
 
   - model_name: claude-opus-5
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
       api_key: os.environ/NVIDIA_API_KEY_2
-    order: 2
     rpm: 40
 
   - model_name: claude-sonnet-5
@@ -19,30 +22,26 @@ model_list:
       api_base: https://apihub.agnes-ai.com/v1
       api_key: os.environ/AGNES_API_KEY
       use_chat_completions_api: true
-    order: 1
     rpm: 20
 
   - model_name: claude-sonnet-5
     litellm_params:
       model: openai/sensenova-6.8-flash-lite
       api_base: https://token.sensenova.ai/v1
-      api_key: os.environ/AGNES_API_KEY
+      api_key: os.environ/SENSENOVA_API_KEY
       use_chat_completions_api: true
-    order: 2
     rpm: 20
 
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b
       api_key: os.environ/NVIDIA_API_KEY_1
-    order: 1
     rpm: 40
 
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b
       api_key: os.environ/NVIDIA_API_KEY_2
-    order: 2
     rpm: 40
 
   - model_name: gemini-3.5-flash-lite
