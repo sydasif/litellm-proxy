@@ -1,22 +1,6 @@
 model_list:
-  # rpm is a router-level key and is promoted into litellm_params at init, so
-  # top-level placement is fine. `order` would NOT be: litellm reads it from
-  # litellm_params (or model_info) only, so a top-level `order` is silently
-  # ignored and the pool is load-balanced. Put it inside litellm_params if you
-  # ever want key 2 held as a hot standby instead of a load-balanced peer.
-  #
-  # `timeout` is a per-attempt read timeout on the upstream call, and it must
-  # live in litellm_params (same rule as `order`). Without it, a provider that
-  # accepts a request and then sends nothing holds each attempt open for the
-  # global request_timeout below, and the nested retries (openai SDK's 2 plus
-  # router num_retries 2) multiply that into many minutes of client silence
-  # before a fallback becomes possible.
   - model_name: claude-opus-5
     litellm_params:
-      # opus used to point at nvidia/nemotron-3-ultra-550b-a55b. NIM lists that
-      # model but never answers it (request accepted, then zero bytes on the
-      # socket until the caller gives up), which is what made Claude Code hang
-      # with no output. super-120b answers the same call in ~1s.
       model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b
       api_key: os.environ/NVIDIA_API_KEY_1
       timeout: 60
@@ -105,13 +89,8 @@ router_settings:
   routing_strategy: simple-shuffle
   num_retries: 2 # Retry twice before tripping fallback
   cooldown_time: 60 # Shorter cooldown for transient errors
-  allowed_fails: 3 # Fails per minute before a deployment is cooled down (litellm's documented default)
+  allowed_fails: 3 # Fails per minute before a deployment is cooled down (default)
 
-  # `fallbacks` MUST be nested here, under router_settings. litellm's proxy
-  # loader (proxy_server.load_config) forwards only *router_settings* keys into
-  # litellm.Router(...); a top-level `fallbacks:` key is silently dropped, so the
-  # router ends up with fallbacks=None and every failure returns the upstream
-  # error to the client as "No fallback was attempted" instead of cascading.
   fallbacks:
     - claude-opus-5: ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
     - claude-sonnet-5: ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
@@ -120,13 +99,3 @@ router_settings:
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
-
-  # Clients reach this proxy directly (localhost / host network), so the empty
-  # list is the documented value: it also silences the login-throttle warning at
-  # startup, which otherwise limits failed Admin UI sign-ins per username only.
-  trusted_proxy_ranges: []
-
-  # Cache the per-model health state instead of making every /health call probe
-  # every deployment. See litellm docs -> Health Checks.
-  background_health_checks: true
-  health_check_interval: 300
