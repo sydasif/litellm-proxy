@@ -35,7 +35,7 @@ model_list:
       api_base: https://apihub.agnes-ai.com/v1
       api_key: os.environ/AGNES_API_KEY
       use_chat_completions_api: true
-    rpm: 20
+    rpm: 10
 
   - model_name: claude-sonnet-5
     litellm_params:
@@ -43,7 +43,7 @@ model_list:
       api_base: https://token.sensenova.ai/v1
       api_key: os.environ/SENSENOVA_API_KEY
       use_chat_completions_api: true
-    rpm: 20
+    rpm: 10
 
   - model_name: claude-haiku-4-5-20251001
     litellm_params:
@@ -88,6 +88,13 @@ model_list:
       additional_drop_params: ["tools[*].strict"]
     rpm: 15
     tpm: 250000
+
+  - model_name: Qwen3.8
+    litellm_params:
+      model: openai/Qwen3.8-27B
+      api_base: https://developer.amd.com.cn/radeon/api/v1
+      api_key: os.environ/AMD_API_KEY
+      use_chat_completions_api: true
 
 litellm_settings:
   drop_params: true
