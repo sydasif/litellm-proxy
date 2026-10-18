@@ -19,7 +19,7 @@ model_list:
       api_key: os.environ/NVIDIA_API_KEY_2
     rpm: 15
 
-  - model_name: claude-sonnet-5-5
+  - model_name: claude-sonnet-5
     litellm_params:
       model: openai/agnes-2.5-flash
       api_base: https://apihub.agnes-ai.com/v1
@@ -27,7 +27,7 @@ model_list:
       use_chat_completions_api: true
     rpm: 10
 
-  - model_name: claude-sonnet-5-5
+  - model_name: claude-sonnet-5
     litellm_params:
       model: openai/sensenova-6.8-flash-lite
       api_base: https://token.sensenova.ai/v1
@@ -35,7 +35,7 @@ model_list:
       use_chat_completions_api: true
     rpm: 10
 
-  - model_name: claude-sonnet-5-5
+  - model_name: claude-sonnet-5
     litellm_params:
       model: openai/Qwen3.8-27B
       api_base: https://developer.amd.com.cn/radeon/api/v1
