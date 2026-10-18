@@ -1,19 +1,25 @@
 model_list:
-  - model_name: claude-opus-5
+  - model_name: claude-fable-5-1
+    litellm_params:
+      model: openai/Qwen3.8-Flash-Next
+      api_base: https://developer.amd.com.cn/radeon/api/v1
+      api_key: os.environ/AMD_API_KEY
+      use_chat_completions_api: true
+    rpm: 20
+
+  - model_name: claude-opus-5-5
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b
       api_key: os.environ/NVIDIA_API_KEY_1
-      timeout: 60
     rpm: 15
 
-  - model_name: claude-opus-5
+  - model_name: claude-opus-5-5
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b
       api_key: os.environ/NVIDIA_API_KEY_2
-      timeout: 60
     rpm: 15
 
-  - model_name: claude-sonnet-5
+  - model_name: claude-sonnet-5-5
     litellm_params:
       model: openai/agnes-2.5-flash
       api_base: https://apihub.agnes-ai.com/v1
@@ -21,7 +27,7 @@ model_list:
       use_chat_completions_api: true
     rpm: 10
 
-  - model_name: claude-sonnet-5
+  - model_name: claude-sonnet-5-5
     litellm_params:
       model: openai/sensenova-6.8-flash-lite
       api_base: https://token.sensenova.ai/v1
@@ -29,7 +35,7 @@ model_list:
       use_chat_completions_api: true
     rpm: 10
 
-  - model_name: claude-sonnet-5
+  - model_name: claude-sonnet-5-5
     litellm_params:
       model: openai/Qwen3.8-27B
       api_base: https://developer.amd.com.cn/radeon/api/v1
@@ -37,13 +43,13 @@ model_list:
       use_chat_completions_api: true
     rpm: 10
 
-  - model_name: claude-haiku-4-5-20251001
+  - model_name: claude-haiku-5-5
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b
       api_key: os.environ/NVIDIA_API_KEY_1
     rpm: 15
 
-  - model_name: claude-haiku-4-5-20251001
+  - model_name: claude-haiku-5-5
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b
       api_key: os.environ/NVIDIA_API_KEY_2
@@ -81,17 +87,10 @@ model_list:
     rpm: 15
     tpm: 250000
 
-  - model_name: Qwen3.8
-    litellm_params:
-      model: openai/Qwen3.8-27B
-      api_base: https://developer.amd.com.cn/radeon/api/v1
-      api_key: os.environ/AMD_API_KEY
-      use_chat_completions_api: true
-
 litellm_settings:
   drop_params: true
   use_chat_completions_url_for_anthropic_messages: true
-  request_timeout: 180
+  request_timeout: 120
 
 router_settings:
   routing_strategy: simple-shuffle
