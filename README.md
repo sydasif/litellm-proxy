@@ -1,6 +1,6 @@
 # AI Proxy Gateway
 
-An AI Proxy Gateway that routes **Claude Code** and other clients through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, Agnes AI, SenseNova, Google Gemini) with load balancing and cascading fallbacks. Runs as a **single-worker** instance (`--num_workers 1`, supervised by Gunicorn) so the router's cooldown/usage counters apply to every request — no Postgres/Redis required. Sized at 1 vCPU / 3 GB to leave room on the host for other services.
+An AI Proxy Gateway that routes **Claude Code** and other clients through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, Agnes AI, SenseNova, Google Gemini, AMD Radeon) with load balancing and cascading fallbacks. Runs as a **single-worker** instance (`--num_workers 1`, supervised by Gunicorn) so the router's cooldown/usage counters apply to every request — no Postgres/Redis required. Sized at 1 vCPU / 3 GB to leave room on the host for other services.
 
 It is a **single-user** gateway: one Claude Code client, so there is no worker pool to size, no Redis, no admission control and no autoscaling. The point of the routing config here is that a request never hangs and always lands on a model that answers — not throughput.
 
@@ -10,11 +10,12 @@ Binds on `0.0.0.0:4000`; host network must isolate this port. Runs on the pinned
 
 ## Features
 
-- **Multi-Provider Routing**: Access NVIDIA NIM, Agnes AI, SenseNova, and Google Gemini endpoints through unified virtual model names with cascading fallbacks and usage-based load balancing.
-- **Load Balancing**: `simple-shuffle` (`routing_strategy` in `litellm/config.yaml`) routes to the least-utilized deployment per worker. Every alias holds two deployments — the two NVIDIA NIM aliases use two API keys each, `claude-sonnet-5` pairs Agnes AI with SenseNova, and both Gemini aliases use two keys — so all five spread load across two endpoints.
+- **Multi-Provider Routing**: Access NVIDIA NIM, Agnes AI, SenseNova, Google Gemini, and AMD Radeon endpoints through unified virtual model names with cascading fallbacks and usage-based load balancing.
+- **Load Balancing**: `simple-shuffle` (`routing_strategy` in `litellm/config.yaml`) routes to the least-utilized deployment per worker. Every Claude and Gemini alias holds two or more deployments — the two NVIDIA NIM aliases use two API keys each, `claude-sonnet-5` pairs Agnes AI and SenseNova with AMD Radeon's Qwen (three), and both Gemini aliases use two keys. The standalone `Qwen3.8` alias is the exception: a single AMD Radeon deployment with nothing to spread across.
 - **Cascading Fallbacks**: every Claude alias follows the same ordered cascade —
   1. `gemini-3.5-flash-lite`
   2. `gemini-3.1-flash-lite`
+- **AMD Radeon Model**: `Qwen3.8` (AMD Radeon, `AMD_API_KEY`) is exposed both as a standalone alias with no fallback cascade and as a third `claude-sonnet-5` deployment, where it inherits the sonnet cascade.
 - **Parameter Normalization**: Drops unsupported parameters (`drop_params: true`) for cross-provider compatibility.
 - **Tool Compatibility**: Automatically strips `strict: null` from tool definitions (`additional_drop_params` on every Gemini deployment) for backends that reject non-boolean values.
 - **Lean Health Check**: Container liveness uses a stdlib `urllib` probe (no `curl`/`requests` dependency), with a 180s start period (a cold start measured 129s) and 30s interval.
@@ -51,9 +52,9 @@ Binds on `0.0.0.0:4000`; host network must isolate this port. Runs on the pinned
    EOF
    ```
 
-   _(Be sure to edit `.env` and add your `NVIDIA_API_KEY_1`, `NVIDIA_API_KEY_2`, `AGNES_API_KEY`, `SENSENOVA_API_KEY`, `GEMINI_API_KEY_1`, and `GEMINI_API_KEY_2`)_
+   _(Be sure to edit `.env` and add your `NVIDIA_API_KEY_1`, `NVIDIA_API_KEY_2`, `AGNES_API_KEY`, `SENSENOVA_API_KEY`, `GEMINI_API_KEY_1`, `GEMINI_API_KEY_2`, and `AMD_API_KEY`)_
 
-3. **Start the proxy stack (builds patched image automatically):**
+3. **Start the proxy stack** (builds the patched image on first run — `up` alone reuses an existing image, so run `docker compose build --no-cache litellm` after a `Dockerfile`/base-image change):
 
    ```bash
    docker compose up -d

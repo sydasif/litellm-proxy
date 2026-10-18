@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, Agnes AI, SenseNova, Google Gemini) with load balancing and cascading fallbacks. Runs as a **single-worker** instance (`--num_workers 1`, supervised by Gunicorn via `--run_gunicorn`), so the router's cooldown/usage counters are shared by every request — no Postgres/Redis is needed to make them coherent. Sized to leave room on the host: 1 vCPU / 3 GB.
+AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, Agnes AI, SenseNova, Google Gemini, AMD Radeon) with load balancing and cascading fallbacks. Runs as a **single-worker** instance (`--num_workers 1`, supervised by Gunicorn via `--run_gunicorn`), so the router's cooldown/usage counters are shared by every request — no Postgres/Redis is needed to make them coherent. Sized to leave room on the host: 1 vCPU / 3 GB.
 
 **Single-user by design.** One Claude Code client shares this gateway, so every scaling knob is deliberately absent: no Redis (cooldowns are already coherent in the one worker), no worker pool to size, no admission control, no autoscaling. The per-deployment `rpm`/`tpm` keys are **not** just a description of provider ceilings — litellm reads them and enforces them pre-call (see `router.py`: the deployment's `tpm`/`rpm` feed the usage counters and the pre-call check that raises when a deployment is over its limit). For a single user their practical effect is that a burst can trip one deployment's ceiling and become a retry or a fallback rather than a rejection — with the Gemini deployments the tight ones at 250K TPM each, which a single large Claude Code context can take a sizeable bite out of. Capacity is a non-goal; the routing config earns its keep on **failover and provider-latency hygiene** — that the one user's request never hangs and always ends on a model that answers. Tuning decisions here should be judged on the user's own perceived latency and on not wasting tokens on attempts that are going to be discarded, never on throughput.
 
@@ -16,13 +16,14 @@ Binds on `0.0.0.0:4000` (host network must isolate this port). Uses Docker Compo
 
 **Backend deployments:**
 
-| Virtual Model               | Deployment 1                                                               | Deployment 2                                                    |
-| --------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `claude-opus-5`             | `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (`timeout: 60`, key 1, RPM 40) | `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (`timeout: 60`, key 2, RPM 40) |
-| `claude-sonnet-5`           | `openai/agnes-2.5-flash` (Agnes AI, `AGNES_API_KEY`, RPM 20)               | `openai/sensenova-6.8-flash-lite` (SenseNova, `SENSENOVA_API_KEY`, RPM 20) |
-| `claude-haiku-4-5-20251001` | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 1, RPM 40)        | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 2, RPM 40) |
-| `gemini-3.5-flash-lite`     | `gemini/gemini-3.5-flash-lite` (key 1, RPM 15, TPM 250K)                   | `gemini/gemini-3.5-flash-lite` (key 2, RPM 15, TPM 250K)        |
-| `gemini-3.1-flash-lite`     | `gemini/gemini-3.1-flash-lite` (key 1, RPM 15, TPM 250K)                   | `gemini/gemini-3.1-flash-lite` (key 2, RPM 15, TPM 250K)        |
+| Virtual Model               | Deployment 1                                                                | Deployment 2                                                              | Deployment 3                                             |
+| --------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `claude-opus-5`             | `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (`timeout: 60`, key 1, RPM 15) | `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (`timeout: 60`, key 2, RPM 15) | —                                                        |
+| `claude-sonnet-5`           | `openai/agnes-2.5-flash` (Agnes AI, `AGNES_API_KEY`, RPM 10)                | `openai/sensenova-6.8-flash-lite` (SenseNova, `SENSENOVA_API_KEY`, RPM 10) | `openai/Qwen3.8-27B` (AMD Radeon, `AMD_API_KEY`, RPM 10) |
+| `claude-haiku-4-5-20251001` | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 1, RPM 15)         | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 2, RPM 15)       | —                                                        |
+| `gemini-3.5-flash-lite`     | `gemini/gemini-3.5-flash-lite` (key 1, RPM 15, TPM 250K)                    | `gemini/gemini-3.5-flash-lite` (key 2, RPM 15, TPM 250K)                  | —                                                        |
+| `gemini-3.1-flash-lite`     | `gemini/gemini-3.1-flash-lite` (key 1, RPM 15, TPM 250K)                    | `gemini/gemini-3.1-flash-lite` (key 2, RPM 15, TPM 250K)                  | —                                                        |
+| `Qwen3.8`                   | `openai/Qwen3.8-27B` (AMD Radeon, `AMD_API_KEY`, no RPM/TPM cap)            | — (single deployment)                                                     | —                                                        |
 
 > **Why opus is not on `nemotron-3-ultra-550b-a55b`:** NIM lists that model but never answers it — the request is accepted and the socket then stays silent (0 bytes in 90s on a raw TLS connection; httpx `ReadTimeout` at 20s, 3/3; OpenAI SDK `APITimeoutError` at 30s), while `super-120b` answers the same call in ~1s. Through the proxy that stall surfaced as an unbounded Claude Code hang: **700s with zero response bytes**, on both `/v1/messages` and `/v1/chat/completions`, streaming and non-streaming, and with **no error ever raised** — so no fallback could fire. If you repoint opus back to an ultra model, test it first (see Testing).
 
@@ -33,9 +34,11 @@ Binds on `0.0.0.0:4000` (host network must isolate this port). Uses Docker Compo
 
 **Full failover cascade:** `opus/sonnet/haiku → gemini-3.5-flash-lite → gemini-3.1-flash-lite`
 
-**Load balancing & failover:** `routing_strategy: simple-shuffle` routes to the least-utilized deployment; `num_retries: 2` adds per-call retries within a model's deployment pool before escalating to the fallback model; `cooldown_time: 60` marks a failing deployment unhealthy for 60s. `allowed_fails: 3` states LiteLLM's documented default explicitly (fails per minute before a deployment is cooled down for `cooldown_time`); there is no `retry_after` key. All five pools hold two deployments, so `simple-shuffle` spreads load across both endpoints of each (verified against a live `litellm.Router`: both keys of `claude-opus-5` and of `claude-haiku-4-5-20251001`, and both providers of `claude-sonnet-5`, are returned across successive picks).
+**The `Qwen3.8` alias is standalone and has no fallback:** it is absent from the `fallbacks` map, so an upstream failure on it reaches the client directly instead of cascading. (The same AMD model is also a third `claude-sonnet-5` deployment — see the table above — where it *does* inherit the sonnet cascade.)
 
-> **`rpm` vs `order` placement (both used to sit at the top level of a deployment):** litellm promotes a top-level `rpm` (and `tpm`) into `litellm_params` at router init, so `rpm: 40` at deployment level works. It does **not** do that for `order`: `litellm.utils._get_deployment_order` reads `litellm_params.order` then `model_info.order` only, so a top-level `order` was silently inert and has been removed from the config. To hold a key as a hot standby instead of a load-balanced peer, put `order` **inside** `litellm_params` of that deployment.
+**Load balancing & failover:** `routing_strategy: simple-shuffle` routes to the least-utilized deployment; `num_retries: 2` adds per-call retries within a model's deployment pool before escalating to the fallback model; `cooldown_time: 60` marks a failing deployment unhealthy for 60s. `allowed_fails: 3` states LiteLLM's documented default explicitly (fails per minute before a deployment is cooled down for `cooldown_time`); there is no `retry_after` key. All Claude/Gemini pools hold at least two deployments — `claude-sonnet-5` holds **three** (Agnes AI, SenseNova, and AMD Radeon's Qwen) — so `simple-shuffle` spreads load across every deployment of each (verified against a live `litellm.Router` and against the running proxy: both keys of `claude-opus-5` and of `claude-haiku-4-5-20251001`, and all three providers of `claude-sonnet-5`, are returned across successive picks). The standalone `Qwen3.8` alias is the exception — a single AMD Radeon deployment, so it has nothing to spread across.
+
+> **`rpm` vs `order` placement (both used to sit at the top level of a deployment):** litellm promotes a top-level `rpm` (and `tpm`) into `litellm_params` at router init, so `rpm: 15` at deployment level works. It does **not** do that for `order`: `litellm.utils._get_deployment_order` reads `litellm_params.order` then `model_info.order` only, so a top-level `order` was silently inert and has been removed from the config. To hold a key as a hot standby instead of a load-balanced peer, put `order` **inside** `litellm_params` of that deployment.
 
 > Note: the proxy runs a **single** worker, so a cooldown or usage decision applies to the whole gateway rather than to one process in two. If the worker count is ever raised (for throughput), that coherence is lost: cooldowns and usage counters become per-worker again unless Redis is added, roughly halving effective failover coverage under concurrent load.
 
@@ -128,11 +131,11 @@ Source of truth for routing and provider settings. Key behaviors:
 
 **`rpm` placement:** top-level on each deployment (the router promotes it into `litellm_params`). **No `order` keys** — see the note in Architecture; a top-level `order` is ignored by litellm.
 
-**Per-deployment extra params:** the `claude-sonnet-5` deployments (Agnes AI, SenseNova) set `use_chat_completions_api: true` with an explicit `api_base` and their own keys (`AGNES_API_KEY`, `SENSENOVA_API_KEY`); the two `claude-opus-5` deployments set `timeout: 60`; the Gemini and remaining NVIDIA NIM deployments rely on provider defaults.
+**Per-deployment extra params:** the three `claude-sonnet-5` deployments (Agnes AI, SenseNova, and AMD Radeon's Qwen) set `use_chat_completions_api: true` with an explicit `api_base` and their own keys (`AGNES_API_KEY`, `SENSENOVA_API_KEY`, `AMD_API_KEY`); the standalone `Qwen3.8` (AMD Radeon) does the same; the two `claude-opus-5` deployments set `timeout: 60`; the Gemini and remaining NVIDIA NIM deployments rely on provider defaults.
 
 **`additional_drop_params: ["tools[*].strict"]`** — Applied to all Gemini deployments. Strips `strict: null` from tool definitions before sending to backends that reject non-boolean values (fixes 400 validation errors from providers that apply strict type validation).
 
-**`general_settings`:** `master_key` auth, plus `trusted_proxy_ranges: []` (clients connect directly; also silences the login-throttle warning at startup) and `background_health_checks: true` with `health_check_interval: 300` so `/health` serves a cached state instead of probing every deployment per call. No `database_url` — single-instance, no PostgreSQL. Virtual keys/budgets/spend reports are in-memory only.
+**`general_settings`:** `master_key` auth only. The `trusted_proxy_ranges: []` key (which silenced the login-throttle warning at startup) and the `background_health_checks: true` / `health_check_interval: 300` keys (which made `/health` serve a cached snapshot instead of probing every deployment per call) have been **removed from the config** — `/health` therefore probes per call again. No `database_url` — single-instance, no PostgreSQL. Virtual keys/budgets/spend reports are in-memory only.
 
 ## Testing
 
@@ -164,9 +167,11 @@ curl -s http://localhost:4000/v1/model/info \
   python3 -c "import json,sys; [print(f'{m[\"model_name\"]:30s} {m[\"litellm_params\"].get(\"model\",\"?\"):40s}') for m in json.load(sys.stdin)['data']]"
 
 # Check load balancing (different x-litellm-model-id headers across requests).
-# Note: pools now use simple-shuffle. `claude-opus-5`, `claude-sonnet-5`,
+# Note: pools now use simple-shuffle. `claude-opus-5`,
 # `claude-haiku-4-5-20251001`, `gemini-3.5-flash-lite` and
-# `gemini-3.1-flash-lite` each have two deployments, so all five should vary.
+# `gemini-3.1-flash-lite` each have two deployments and `claude-sonnet-5`
+# has three, so all five should vary.
+# The standalone `Qwen3.8` is a single deployment, so its model id will not vary.
 # Counters live in the single worker process, so these picks are coordinated across the
 # whole gateway rather than per process.
 for i in {1..6}; do
