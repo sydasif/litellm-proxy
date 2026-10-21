@@ -1,12 +1,4 @@
 model_list:
-  - model_name: claude-fable-5-1
-    litellm_params:
-      model: openai/Qwen3.8-Flash-Next
-      api_base: https://developer.amd.com.cn/radeon/api/v1
-      api_key: os.environ/AMD_API_KEY
-      use_chat_completions_api: true
-    rpm: 20
-
   - model_name: claude-opus-5-5
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b
@@ -55,6 +47,16 @@ model_list:
       api_key: os.environ/NVIDIA_API_KEY_2
     rpm: 15
 
+  - model_name: claude-fable-5-1
+    litellm_params:
+      model: openai/Qwen3.8-Flash-Next
+      api_base: https://developer.amd.com.cn/radeon/api/v1
+      api_key: os.environ/AMD_API_KEY
+      use_chat_completions_api: true
+    rpm: 20
+
+  # fallback models
+
   - model_name: gemini-3.5-flash-lite
     litellm_params:
       model: gemini/gemini-3.5-flash-lite
@@ -90,7 +92,7 @@ model_list:
 litellm_settings:
   drop_params: true
   use_chat_completions_url_for_anthropic_messages: true
-  request_timeout: 120
+  request_timeout: 180
 
 router_settings:
   routing_strategy: simple-shuffle
@@ -99,10 +101,10 @@ router_settings:
   allowed_fails: 3 # Fails per minute before a deployment is cooled down (default)
 
   fallbacks:
-    - claude-opus-5: ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
+    - claude-opus-5-5: ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
     - claude-sonnet-5: ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
-    - claude-haiku-4-5-20251001:
-        ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
+    - claude-haiku-5-5: ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
+    - claude-fable-5-1: ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
