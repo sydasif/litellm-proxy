@@ -11,7 +11,7 @@ Binds on `0.0.0.0:4000`; host network must isolate this port. Runs on the pinned
 ## Features
 
 - **Multi-Provider Routing**: Access NVIDIA NIM, Agnes AI, SenseNova, Google Gemini, and AMD Radeon endpoints through unified virtual model names with cascading fallbacks and usage-based load balancing.
-- **Load Balancing**: `simple-shuffle` (`routing_strategy` in `litellm/config.yaml`) routes to the least-utilized deployment per worker. The two NVIDIA NIM aliases (`claude-opus-5-5`, `claude-haiku-5-5`) use two API keys each, `claude-sonnet-5` pairs Agnes AI and SenseNova with AMD Radeon's Qwen (three deployments), and `gemini-3.5-flash-lite` uses two keys.
+- **Load Balancing**: `simple-shuffle` (`routing_strategy` in `litellm/config.yaml`) routes to the least-utilized deployment per worker. The two NVIDIA NIM aliases (`claude-opus-5-5`, `claude-haiku-5-5`) use two API keys each, `claude-sonnet-5` pairs Agnes AI with AMD Radeon's Qwen (two deployments), and `gemini-3.5-flash-lite` uses two keys.
 - **Cascading Fallbacks**: every Claude alias follows the same ordered cascade —
   1. `gemini-3.5-flash-lite`
   2. `sensenova-6.8-flash-lite`
@@ -23,7 +23,7 @@ Binds on `0.0.0.0:4000`; host network must isolate this port. Runs on the pinned
 - **Build-Gated Streaming Image**: Builds `litellm-proxy:patched` on the pinned `litellm 1.105.1` base image, where the Nemotron thinking-stream defects that used to need a local source patch are fixed upstream. The build replays the failing chunk shape against the installed adapter and aborts if the behavior regresses.
 - **Single-Worker Design**: One worker process (`--num_workers 1`) under Gunicorn. In-memory state (router cooldowns, usage counters, request spend) is shared by every request, which the multi-worker setup could not do without Redis. No external database, Redis, or UI required.
 - **Health Checks**: Liveness (`/health/liveliness`) and readiness (`/health/readiness`) endpoints.
-- **Lean Build Context**: `.dockerignore` excludes `.env`, `.env.*`, `.git/`, `.claude/`, all markdown (`*.md`), images (`logo.png`), docker compose files (`docker-compose*.yml`), and caches from the Docker build context.
+- **Lean Build Context**: `.dockerignore` excludes `.env`, `.env.*` (except `.env.example`), `.git/`, `.claude/`, `.gitignore`, `LICENSE`, all markdown (`*.md`), images (`logo.png`), docker compose files (`docker-compose*.yml`), and caches from the Docker build context.
 
 ---
 

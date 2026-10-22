@@ -16,12 +16,12 @@ Binds on `0.0.0.0:4000` (host network must isolate this port). Uses Docker Compo
 
 **Backend deployments:**
 
-| Virtual Model           | Deployment 1                                                | Deployment 2                                                       | Deployment 3                                     |
-| ----------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------ |
-| `claude-opus-5-5`       | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 1) | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 2)        | —                                                |
-| `claude-sonnet-5`       | `openai/agnes-2.5-flash` (Agnes AI, `AGNES_API_KEY`)        | `openai/sensenova-6.8-flash-lite` (SenseNova, `SENSENOVA_API_KEY`) | `openai/Qwen3.8-27B` (AMD Radeon, `AMD_API_KEY`) |
-| `claude-haiku-5-5`      | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 1)  | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 2)         | —                                                |
-| `gemini-3.5-flash-lite` | `gemini/gemini-3.5-flash-lite` (key 1)                      | `gemini/gemini-3.5-flash-lite` (key 2)                             | —                                                |
+| Virtual Model           | Deployment 1                                                | Deployment 2                                                | Deployment 3 |
+| ----------------------- | ----------------------------------------------------------- | ----------------------------------------------------------- | ------------ |
+| `claude-opus-5-5`       | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 1) | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 2) | —            |
+| `claude-sonnet-5`       | `openai/agnes-2.5-flash` (Agnes AI, `AGNES_API_KEY`)        | `openai/Qwen3.8-27B` (AMD Radeon, `AMD_API_KEY`)            | —            |
+| `claude-haiku-5-5`      | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 1)  | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 2)  | —            |
+| `gemini-3.5-flash-lite` | `gemini/gemini-3.5-flash-lite` (key 1)                      | `gemini/gemini-3.5-flash-lite` (key 2)                      | —            |
 
 > **NIM's `nemotron-3-ultra-550b-a55b` never answers:** NIM lists it but the request is accepted and the socket then stays silent (0 bytes in 90s on a raw TLS connection; httpx `ReadTimeout` at 20s, 3/3; OpenAI SDK `APITimeoutError` at 30s), while the smaller nemotron models answer the same call in ~1s. Through this proxy that stall surfaced as an unbounded Claude Code hang: **700s with zero response bytes**, on both `/v1/messages` and `/v1/chat/completions`, streaming and non-streaming, and with **no error ever raised** — so no fallback could fire. No alias is on an ultra model now, but if you repoint one at one, test it first (see Testing).
 
@@ -32,7 +32,7 @@ Binds on `0.0.0.0:4000` (host network must isolate this port). Uses Docker Compo
 
 **Full failover cascade:** `claude-opus-5-5 / claude-sonnet-5 / claude-haiku-5-5 → gemini-3.5-flash-lite → sensenova-6.8-flash-lite`
 
-**Load balancing & failover:** `routing_strategy: simple-shuffle` routes to the least-utilized deployment; `num_retries: 2` adds per-call retries within a model's deployment pool before escalating to the fallback model; `cooldown_time: 50` marks a failing deployment unhealthy for 50s. `allowed_fails: 3` states LiteLLM's documented default explicitly (fails per minute before a deployment is cooled down for `cooldown_time`); there is no `retry_after` key. All Claude pools hold at least two deployments — `claude-opus-5-5` and `claude-haiku-5-5` each hold two NVIDIA keys, `claude-sonnet-5` holds three (Agnes AI, SenseNova, and AMD Radeon's Qwen), and `gemini-3.5-flash-lite` holds two keys — so `simple-shuffle` spreads load across every deployment of each (verified against a live `litellm.Router` and against the running proxy: both keys of `claude-opus-5-5` and of `claude-haiku-5-5`, and more than one provider of `claude-sonnet-5`, are returned across successive picks).
+**Load balancing & failover:** `routing_strategy: simple-shuffle` routes to the least-utilized deployment; `num_retries: 2` adds per-call retries within a model's deployment pool before escalating to the fallback model; `cooldown_time: 50` marks a failing deployment unhealthy for 50s. `allowed_fails: 3` states LiteLLM's documented default explicitly (fails per minute before a deployment is cooled down for `cooldown_time`); there is no `retry_after` key. All Claude pools hold at least two deployments — `claude-opus-5-5` and `claude-haiku-5-5` each hold two NVIDIA keys, `claude-sonnet-5` holds two (Agnes AI and AMD Radeon's Qwen), and `gemini-3.5-flash-lite` holds two keys — so `simple-shuffle` spreads load across every deployment of each (verified against a live `litellm.Router` and against the running proxy: both keys of `claude-opus-5-5` and of `claude-haiku-5-5`, and more than one provider of `claude-sonnet-5`, are returned across successive picks).
 
 > **`rpm` vs `order` placement (both used to sit at the top level of a deployment):** litellm promotes a top-level `rpm` (and `tpm`) into `litellm_params` at router init, so `rpm: 15` at deployment level works. It does **not** do that for `order`: `litellm.utils._get_deployment_order` reads `litellm_params.order` then `model_info.order` only, so a top-level `order` was silently inert and has been removed from the config. To hold a key as a hot standby instead of a load-balanced peer, put `order` **inside** `litellm_params` of that deployment.
 
@@ -125,7 +125,7 @@ Source of truth for routing and provider settings. Key behaviors:
 
 > **`rpm`/`tpm` keys are not set on any deployment** in the current config. The per-deployment `rpm`/`tpm` mechanism exists in litellm (top-level `rpm` on a deployment is promoted into `litellm_params`) but no key uses it here. **No `order` keys** either — a top-level `order` is silently ignored by litellm.
 
-**Per-deployment extra params:** the three `claude-sonnet-5` deployments (Agnes AI, SenseNova, and AMD Radeon's Qwen) set `use_chat_completions_api: true` with an explicit `api_base` and their own keys (`AGNES_API_KEY`, `SENSENOVA_API_KEY`, `AMD_API_KEY`); no deployment currently sets a per-deployment `timeout` (see Resilience); the Gemini and NVIDIA NIM deployments rely on provider defaults.
+**Per-deployment extra params:** the two `claude-sonnet-5` deployments (Agnes AI and AMD Radeon's Qwen) set `use_chat_completions_api: true` with an explicit `api_base` and their own keys (`AGNES_API_KEY`, `AMD_API_KEY`); the standalone `sensenova-6.8-flash-lite` fallback alias is configured the same way with `SENSENOVA_API_KEY`. No deployment currently sets a per-deployment `timeout` (see Resilience); the Gemini and NVIDIA NIM deployments rely on provider defaults.
 
 **`additional_drop_params: ["tools[*].strict"]`** — Applied to all Gemini deployments. Strips `strict: null` from tool definitions before sending to backends that reject non-boolean values (fixes 400 validation errors from providers that apply strict type validation).
 
@@ -163,7 +163,7 @@ curl -s http://localhost:4000/v1/model/info \
 # Check load balancing (different x-litellm-model-id headers across requests).
 # Note: pools use simple-shuffle. `claude-opus-5-5`, `claude-haiku-5-5` and
 # `gemini-3.5-flash-lite` each have two deployments and `claude-sonnet-5`
-# has three, so all should vary.
+# has two, so all should vary.
 # Counters live in the single worker process, so these picks are coordinated across the
 # whole gateway rather than per process.
 for i in {1..6}; do
