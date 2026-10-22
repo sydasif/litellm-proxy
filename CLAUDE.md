@@ -16,36 +16,36 @@ Binds on `0.0.0.0:4000` (host network must isolate this port). Uses Docker Compo
 
 **Backend deployments:**
 
-| Virtual Model               | Deployment 1                                                                | Deployment 2                                                              | Deployment 3                                             |
-| --------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `claude-opus-5`             | `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (`timeout: 60`, key 1, RPM 15) | `nvidia_nim/nvidia/nemotron-3-super-120b-a12b` (`timeout: 60`, key 2, RPM 15) | —                                                        |
-| `claude-sonnet-5`           | `openai/agnes-2.5-flash` (Agnes AI, `AGNES_API_KEY`, RPM 10)                | `openai/sensenova-6.8-flash-lite` (SenseNova, `SENSENOVA_API_KEY`, RPM 10) | `openai/Qwen3.8-27B` (AMD Radeon, `AMD_API_KEY`, RPM 10) |
-| `claude-haiku-4-5-20251001` | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 1, RPM 15)         | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 2, RPM 15)       | —                                                        |
-| `gemini-3.5-flash-lite`     | `gemini/gemini-3.5-flash-lite` (key 1, RPM 15, TPM 250K)                    | `gemini/gemini-3.5-flash-lite` (key 2, RPM 15, TPM 250K)                  | —                                                        |
-| `gemini-3.1-flash-lite`     | `gemini/gemini-3.1-flash-lite` (key 1, RPM 15, TPM 250K)                    | `gemini/gemini-3.1-flash-lite` (key 2, RPM 15, TPM 250K)                  | —                                                        |
-| `Qwen3.8`                   | `openai/Qwen3.8-27B` (AMD Radeon, `AMD_API_KEY`, no RPM/TPM cap)            | — (single deployment)                                                     | —                                                        |
+| Virtual Model           | Deployment 1                                                        | Deployment 2                                                               | Deployment 3                                             |
+| ----------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `claude-opus-5-5`       | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 1, RPM 15) | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 2, RPM 15)        | —                                                        |
+| `claude-sonnet-5`       | `openai/agnes-2.5-flash` (Agnes AI, `AGNES_API_KEY`, RPM 10)        | `openai/sensenova-6.8-flash-lite` (SenseNova, `SENSENOVA_API_KEY`, RPM 10) | `openai/Qwen3.8-27B` (AMD Radeon, `AMD_API_KEY`, RPM 10) |
+| `claude-haiku-5-5`      | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 1, RPM 15)  | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 2, RPM 15)         | —                                                        |
+| `claude-fable-5-1`      | `openai/Qwen3.8-Flash-Next` (AMD Radeon, `AMD_API_KEY`, RPM 20)     | — (single deployment)                                                      | —                                                        |
+| `gemini-3.5-flash-lite` | `gemini/gemini-3.5-flash-lite` (key 1, RPM 15, TPM 250K)            | `gemini/gemini-3.5-flash-lite` (key 2, RPM 15, TPM 250K)                   | —                                                        |
+| `gemini-3.1-flash-lite` | `gemini/gemini-3.1-flash-lite` (key 1, RPM 15, TPM 250K)            | `gemini/gemini-3.1-flash-lite` (key 2, RPM 15, TPM 250K)                   | —                                                        |
 
-> **Why opus is not on `nemotron-3-ultra-550b-a55b`:** NIM lists that model but never answers it — the request is accepted and the socket then stays silent (0 bytes in 90s on a raw TLS connection; httpx `ReadTimeout` at 20s, 3/3; OpenAI SDK `APITimeoutError` at 30s), while `super-120b` answers the same call in ~1s. Through the proxy that stall surfaced as an unbounded Claude Code hang: **700s with zero response bytes**, on both `/v1/messages` and `/v1/chat/completions`, streaming and non-streaming, and with **no error ever raised** — so no fallback could fire. If you repoint opus back to an ultra model, test it first (see Testing).
+> **NIM's `nemotron-3-ultra-550b-a55b` never answers:** NIM lists it but the request is accepted and the socket then stays silent (0 bytes in 90s on a raw TLS connection; httpx `ReadTimeout` at 20s, 3/3; OpenAI SDK `APITimeoutError` at 30s), while the smaller nemotron models answer the same call in ~1s. Through this proxy that stall surfaced as an unbounded Claude Code hang: **700s with zero response bytes**, on both `/v1/messages` and `/v1/chat/completions`, streaming and non-streaming, and with **no error ever raised** — so no fallback could fire. No alias is on an ultra model now, but if you repoint one at one, test it first (see Testing).
 
-**Fallback chain (when primary deployments fail):** all three Claude aliases share the same ordered cascade:
+**Fallback chain (when primary deployments fail):** all four Claude aliases share the same ordered cascade:
 
 1. `gemini-3.5-flash-lite`
 2. `gemini-3.1-flash-lite`
 
-**Full failover cascade:** `opus/sonnet/haiku → gemini-3.5-flash-lite → gemini-3.1-flash-lite`
+**Full failover cascade:** `claude-opus-5-5 / claude-sonnet-5 / claude-haiku-5-5 / claude-fable-5-1 → gemini-3.5-flash-lite → gemini-3.1-flash-lite`
 
-**The `Qwen3.8` alias is standalone and has no fallback:** it is absent from the `fallbacks` map, so an upstream failure on it reaches the client directly instead of cascading. (The same AMD model is also a third `claude-sonnet-5` deployment — see the table above — where it *does* inherit the sonnet cascade.)
+**`claude-fable-5-1` is a single deployment:** it has only one AMD Radeon deployment (`Qwen3.8-Flash-Next`, `AMD_API_KEY`), so there is nothing to load-balance across and no in-pool peer to retry — but, unlike the old standalone `Qwen3.8` alias, it _is_ in the `fallbacks` map, so an upstream failure cascades to the Gemini pool instead of reaching the client. (AMD's `Qwen3.8-27B` is also a third `claude-sonnet-5` deployment — see the table above — where it inherits the sonnet cascade.)
 
-**Load balancing & failover:** `routing_strategy: simple-shuffle` routes to the least-utilized deployment; `num_retries: 2` adds per-call retries within a model's deployment pool before escalating to the fallback model; `cooldown_time: 60` marks a failing deployment unhealthy for 60s. `allowed_fails: 3` states LiteLLM's documented default explicitly (fails per minute before a deployment is cooled down for `cooldown_time`); there is no `retry_after` key. All Claude/Gemini pools hold at least two deployments — `claude-sonnet-5` holds **three** (Agnes AI, SenseNova, and AMD Radeon's Qwen) — so `simple-shuffle` spreads load across every deployment of each (verified against a live `litellm.Router` and against the running proxy: both keys of `claude-opus-5` and of `claude-haiku-4-5-20251001`, and all three providers of `claude-sonnet-5`, are returned across successive picks). The standalone `Qwen3.8` alias is the exception — a single AMD Radeon deployment, so it has nothing to spread across.
+**Load balancing & failover:** `routing_strategy: simple-shuffle` routes to the least-utilized deployment; `num_retries: 2` adds per-call retries within a model's deployment pool before escalating to the fallback model; `cooldown_time: 60` marks a failing deployment unhealthy for 60s. `allowed_fails: 3` states LiteLLM's documented default explicitly (fails per minute before a deployment is cooled down for `cooldown_time`); there is no `retry_after` key. All Claude/Gemini pools hold at least two deployments — `claude-sonnet-5` holds **three** (Agnes AI, SenseNova, and AMD Radeon's Qwen) — so `simple-shuffle` spreads load across every deployment of each (verified against a live `litellm.Router` and against the running proxy: both keys of `claude-opus-5-5` and of `claude-haiku-5-5`, and more than one provider of `claude-sonnet-5`, are returned across successive picks). The single-deployment `claude-fable-5-1` is the exception — one AMD Radeon deployment, so it has nothing to spread across and its model id never varies.
 
 > **`rpm` vs `order` placement (both used to sit at the top level of a deployment):** litellm promotes a top-level `rpm` (and `tpm`) into `litellm_params` at router init, so `rpm: 15` at deployment level works. It does **not** do that for `order`: `litellm.utils._get_deployment_order` reads `litellm_params.order` then `model_info.order` only, so a top-level `order` was silently inert and has been removed from the config. To hold a key as a hot standby instead of a load-balanced peer, put `order` **inside** `litellm_params` of that deployment.
 
 > Note: the proxy runs a **single** worker, so a cooldown or usage decision applies to the whole gateway rather than to one process in two. If the worker count is ever raised (for throughput), that coherence is lost: cooldowns and usage counters become per-worker again unless Redis is added, roughly halving effective failover coverage under concurrent load.
 
-**Resilience:** `request_timeout: 180` in `litellm_settings` is the global per-attempt cap, and the two `claude-opus-5` deployments tighten it with `timeout: 60` in `litellm_params` (a per-attempt read timeout, placed there for the same reason `order` must be — see the note in Architecture). Two things make the global cap alone insufficient:
+**Resilience:** `request_timeout: 180` in `litellm_settings` is the only timeout in play — **no deployment currently sets a per-deployment `timeout`** (the two older `claude-opus-5` deployments used to tighten it to `timeout: 60` in `litellm_params`; that was dropped in commit `00be96f` and has not come back). Two things to keep in mind:
 
-1. **The client waits out every attempt.** `router_settings.num_retries: 2` means up to **3 attempts at the effective timeout** before the fallback chain is even reached. litellm disables the OpenAI SDK's own retries on router calls — `main.py` sets `max_retries = 0` as soon as it sees a `model_group` in the request metadata, so the SDK layer does not multiply the wait. Measured against a deliberately silent provider with `timeout: 20`: the client waited **74.5s** (3 × 20s + Gemini) and then received a `200` from `gemini-3.5-flash-lite`. Worst-case silence is therefore ≈ `(num_retries + 1) × timeout + fallback latency`; with the 180s global and no per-deployment cap that is ~9 minutes.
-2. **`fallbacks` only fire on an error.** A provider that stalls without ever erroring is never rescued — with only the global cap in place, a stalled opus held the client connection open for the full **700s** measured below. A per-deployment timeout converts a stall into a fast, fallback-able failure: the same silent-provider test ended on `gemini-3.5-flash-lite` instead of never. (Both failure shapes verified end to end — a fast NIM 400 and a black-holed primary each completed from the Gemini cascade.)
+1. **The client waits out every attempt.** `router_settings.num_retries: 2` means up to **3 attempts at the effective timeout** before the fallback chain is even reached. litellm disables the OpenAI SDK's own retries on router calls — `main.py` sets `max_retries = 0` as soon as it sees a `model_group` in the request metadata, so the SDK layer does not multiply the wait. Worst-case silence is therefore ≈ `(num_retries + 1) × timeout + fallback latency`; with the 180s global and no per-deployment cap that is **~9 minutes**. Measured when a per-deployment cap did exist (`timeout: 20` against a deliberately silent provider): the client waited **74.5s** (3 × 20s + Gemini) and then received a `200` from `gemini-3.5-flash-lite` — the cap binds linearly, so re-adding a per-deployment `timeout` is the lever if a pool starts hanging.
+2. **`fallbacks` only fire on an error.** A provider that stalls without ever erroring is never rescued — the 700s zero-byte hang described in the Architecture note happened with no error to trigger the cascade. A per-deployment `timeout` converts a stall into a fast, fallback-able failure; without one, only the global cap eventually ends the wait. (Both failure shapes verified back then — a fast NIM 400 and a black-holed primary each completed from the Gemini cascade once the stall was bounded.)
 
 > **`stream_timeout` does not help on `/v1/messages`.** litellm's docs offer `stream_timeout` (per deployment) as the first-chunk cap that "aborts hanging providers and retries another model". Against a black-holed primary on this pin, `stream_timeout: 5` did **not** cut the stall — a streaming request through `/v1/messages` still held the client for the full 240s cap — while the deployment-level `timeout` did bound it. On the Anthropic route Claude Code uses, `timeout` (per deployment) and `request_timeout` (global) are the levers that work; treat `stream_timeout` as untested here.
 
@@ -55,12 +55,12 @@ The image is pinned to `docker.litellm.ai/berriai/litellm:1.105.1`. **The four d
 
 The four defects that litellm 1.92.0 had, and where they were fixed:
 
-| # | Defect (1.92.0) | Fixed upstream by |
-| - | --------------- | ----------------- |
-| 1 | First content block hardcoded as `{"type": "text"}` before any upstream chunk was read, so a stream leading with reasoning opened a phantom empty text block | #33252 — block opened from the classified type |
-| 2 | A chunk carrying both `reasoning_content` and `content` opened a `text` block (content checked first) while the emitted delta was a `thinking_delta` → Claude Code's `"Content block is not a thinking block"` | #34795 — combined chunks split per payload kind (thinking → text → tool_use) |
-| 3 | The text in such a chunk was silently dropped | #34795 (same split) |
-| 4 | `_should_start_new_content_block` indexed `chunk.choices[0]` unguarded → `IndexError` on an empty upstream chunk | choiceless chunks now skipped via `_handle_choiceless_chunk` |
+| #   | Defect (1.92.0)                                                                                                                                                                                                | Fixed upstream by                                                            |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| 1   | First content block hardcoded as `{"type": "text"}` before any upstream chunk was read, so a stream leading with reasoning opened a phantom empty text block                                                   | #33252 — block opened from the classified type                               |
+| 2   | A chunk carrying both `reasoning_content` and `content` opened a `text` block (content checked first) while the emitted delta was a `thinking_delta` → Claude Code's `"Content block is not a thinking block"` | #34795 — combined chunks split per payload kind (thinking → text → tool_use) |
+| 3   | The text in such a chunk was silently dropped                                                                                                                                                                  | #34795 (same split)                                                          |
+| 4   | `_should_start_new_content_block` indexed `chunk.choices[0]` unguarded → `IndexError` on an empty upstream chunk                                                                                               | choiceless chunks now skipped via `_handle_choiceless_chunk`                 |
 
 Until the 1.105.1 bump, defects 1–4 were rewritten into the installed adapter sources at build time by `patches/fix_nemotron_thinking_stream.py`. That script is **kept** (it still applies to the `llms/anthropic/experimental_pass_through/adapters` layout used by ≤1.92.x) but is **no longer run**, and its anchor strings are version-specific.
 
@@ -85,7 +85,7 @@ curl -sN 'http://localhost:4000/v1/messages?beta=true' \
   -H "x-api-key: $LITELLM_MASTER_KEY" \
   -H "anthropic-version: 2023-06-01" \
   -d '{
-    "model": "claude-opus-5",
+    "model": "claude-opus-5-5",
     "max_tokens": 512,
     "stream": true,
     "messages": [{"role": "user", "content": "Hi"}]
@@ -127,11 +127,11 @@ Source of truth for routing and provider settings. Key behaviors:
 
 **`router_settings`:** `routing_strategy: simple-shuffle` (least-utilized deployment), `num_retries: 2` (per-call retries within a deployment pool before escalating), `cooldown_time: 60` (seconds a failed deployment stays unhealthy), `allowed_fails: 3` (fails per minute before that cooldown applies), and `fallbacks` (identical two-model cascade for all Claude aliases). No Redis, and no `retry_after` key.
 
-> **`fallbacks` placement — keep it under `router_settings`.** `proxy_server.load_config()` builds the router from the **`router_settings` block only**: it iterates `config["router_settings"]` and forwards the keys that are valid `litellm.Router` args. `fallbacks` is such an arg, so a *top-level* `fallbacks:` parses fine, passes YAML validation, and is then **silently dropped** — the router gets `fallbacks=None` and every upstream failure reaches the client as "... failed with the error above. No fallback was attempted." Verified by reproducing the loader's router assembly: top-level → `router.fallbacks is None`; nested → `claude-opus-5` resolves to `['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']`. This is the same failure mode as the top-level `order` keys in the note above.
+> **`fallbacks` placement — keep it under `router_settings`.** `proxy_server.load_config()` builds the router from the **`router_settings` block only**: it iterates `config["router_settings"]` and forwards the keys that are valid `litellm.Router` args. `fallbacks` is such an arg, so a _top-level_ `fallbacks:` parses fine, passes YAML validation, and is then **silently dropped** — the router gets `fallbacks=None` and every upstream failure reaches the client as "... failed with the error above. No fallback was attempted." Verified by reproducing the loader's router assembly: top-level → `router.fallbacks is None`; nested → `claude-opus-5-5` resolves to `['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']`. This is the same failure mode as the top-level `order` keys in the note above.
 
 **`rpm` placement:** top-level on each deployment (the router promotes it into `litellm_params`). **No `order` keys** — see the note in Architecture; a top-level `order` is ignored by litellm.
 
-**Per-deployment extra params:** the three `claude-sonnet-5` deployments (Agnes AI, SenseNova, and AMD Radeon's Qwen) set `use_chat_completions_api: true` with an explicit `api_base` and their own keys (`AGNES_API_KEY`, `SENSENOVA_API_KEY`, `AMD_API_KEY`); the standalone `Qwen3.8` (AMD Radeon) does the same; the two `claude-opus-5` deployments set `timeout: 60`; the Gemini and remaining NVIDIA NIM deployments rely on provider defaults.
+**Per-deployment extra params:** the three `claude-sonnet-5` deployments (Agnes AI, SenseNova, and AMD Radeon's Qwen) and the `claude-fable-5-1` deployment (AMD Radeon) set `use_chat_completions_api: true` with an explicit `api_base` and their own keys (`AGNES_API_KEY`, `SENSENOVA_API_KEY`, `AMD_API_KEY`); no deployment currently sets a per-deployment `timeout` (see Resilience); the Gemini and NVIDIA NIM deployments rely on provider defaults.
 
 **`additional_drop_params: ["tools[*].strict"]`** — Applied to all Gemini deployments. Strips `strict: null` from tool definitions before sending to backends that reject non-boolean values (fixes 400 validation errors from providers that apply strict type validation).
 
@@ -147,7 +147,7 @@ curl http://localhost:4000/v1/models
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
-  -d '{"model": "claude-opus-5", "messages": [{"role": "user", "content": "Hello!"}], "max_tokens": 100}'
+  -d '{"model": "claude-opus-5-5", "messages": [{"role": "user", "content": "Hello!"}], "max_tokens": 100}'
 
 # Test tools carrying strict: null (NIM accepts it as-is; the Gemini fallback
 # deployments strip it via additional_drop_params)
@@ -155,7 +155,7 @@ curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
   -d '{
-    "model": "claude-haiku-4-5-20251001",
+    "model": "claude-haiku-5-5",
     "messages": [{"role": "user", "content": "Hello"}],
     "max_tokens": 50,
     "tools": [{"type": "function", "function": {"name": "test", "strict": null, "parameters": {"type": "object"}}}]
@@ -167,11 +167,11 @@ curl -s http://localhost:4000/v1/model/info \
   python3 -c "import json,sys; [print(f'{m[\"model_name\"]:30s} {m[\"litellm_params\"].get(\"model\",\"?\"):40s}') for m in json.load(sys.stdin)['data']]"
 
 # Check load balancing (different x-litellm-model-id headers across requests).
-# Note: pools now use simple-shuffle. `claude-opus-5`,
-# `claude-haiku-4-5-20251001`, `gemini-3.5-flash-lite` and
+# Note: pools use simple-shuffle. `claude-opus-5-5`,
+# `claude-haiku-5-5`, `gemini-3.5-flash-lite` and
 # `gemini-3.1-flash-lite` each have two deployments and `claude-sonnet-5`
-# has three, so all five should vary.
-# The standalone `Qwen3.8` is a single deployment, so its model id will not vary.
+# has three, so all should vary.
+# `claude-fable-5-1` is a single deployment, so its model id will not vary.
 # Counters live in the single worker process, so these picks are coordinated across the
 # whole gateway rather than per process.
 for i in {1..6}; do

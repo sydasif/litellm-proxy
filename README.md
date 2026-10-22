@@ -11,11 +11,11 @@ Binds on `0.0.0.0:4000`; host network must isolate this port. Runs on the pinned
 ## Features
 
 - **Multi-Provider Routing**: Access NVIDIA NIM, Agnes AI, SenseNova, Google Gemini, and AMD Radeon endpoints through unified virtual model names with cascading fallbacks and usage-based load balancing.
-- **Load Balancing**: `simple-shuffle` (`routing_strategy` in `litellm/config.yaml`) routes to the least-utilized deployment per worker. Every Claude and Gemini alias holds two or more deployments — the two NVIDIA NIM aliases use two API keys each, `claude-sonnet-5` pairs Agnes AI and SenseNova with AMD Radeon's Qwen (three), and both Gemini aliases use two keys. The standalone `Qwen3.8` alias is the exception: a single AMD Radeon deployment with nothing to spread across.
+- **Load Balancing**: `simple-shuffle` (`routing_strategy` in `litellm/config.yaml`) routes to the least-utilized deployment per worker. Every Claude and Gemini alias holds two or more deployments — the two NVIDIA NIM aliases use two API keys each, `claude-sonnet-5` pairs Agnes AI and SenseNova with AMD Radeon's Qwen (three), and both Gemini aliases use two keys. `claude-fable-5-1` is the exception: a single AMD Radeon deployment with nothing to spread across.
 - **Cascading Fallbacks**: every Claude alias follows the same ordered cascade —
   1. `gemini-3.5-flash-lite`
   2. `gemini-3.1-flash-lite`
-- **AMD Radeon Model**: `Qwen3.8` (AMD Radeon, `AMD_API_KEY`) is exposed both as a standalone alias with no fallback cascade and as a third `claude-sonnet-5` deployment, where it inherits the sonnet cascade.
+- **AMD Radeon Model**: `claude-fable-5-1` exposes `Qwen3.8-Flash-Next` (AMD Radeon, `AMD_API_KEY`) as a single deployment — it cascades to Gemini on failure, unlike the old standalone `Qwen3.8` alias. AMD's `Qwen3.8-27B` is also a third `claude-sonnet-5` deployment, where it inherits the sonnet cascade.
 - **Parameter Normalization**: Drops unsupported parameters (`drop_params: true`) for cross-provider compatibility.
 - **Tool Compatibility**: Automatically strips `strict: null` from tool definitions (`additional_drop_params` on every Gemini deployment) for backends that reject non-boolean values.
 - **Lean Health Check**: Container liveness uses a stdlib `urllib` probe (no `curl`/`requests` dependency), with a 180s start period (a cold start measured 129s) and 30s interval.
@@ -96,7 +96,7 @@ Test a chat completion:
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"model": "claude-opus-5", "messages": [{"role": "user", "content": "Hello!"}], "max_tokens": 100}'
+  -d '{"model": "claude-opus-5-5", "messages": [{"role": "user", "content": "Hello!"}], "max_tokens": 100}'
 ```
 
 ---
