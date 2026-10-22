@@ -12,7 +12,7 @@ Binds on `0.0.0.0:4000` (host network must isolate this port). Uses Docker Compo
 
 ## Architecture
 
-**Model aliasing:** Virtual model names map to real provider models. Clients request the virtual name; LiteLLM routes across deployments per the pool's strategy below. Only the models listed in the table are currently wired — `claude-fable-5-1` and `gemini-3.1-flash-lite` are referenced in this file's prose for historical context but have no deployments in `config.yaml` and cannot be requested.
+**Model aliasing:** Virtual model names map to real provider models. Clients request the virtual name; LiteLLM routes across deployments per the pool's strategy below.
 
 **Backend deployments:**
 
@@ -135,7 +135,8 @@ Source of truth for routing and provider settings. Key behaviors:
 
 ```bash
 # Verify proxy is running
-curl http://localhost:4000/v1/models
+curl http://localhost:4000/v1/models \
+  -H "Authorization: Bearer $LITELLM_MASTER_KEY"
 
 # Test chat completion
 curl -X POST http://localhost:4000/v1/chat/completions \
