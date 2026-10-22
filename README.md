@@ -11,14 +11,13 @@ Binds on `0.0.0.0:4000`; host network must isolate this port. Runs on the pinned
 ## Features
 
 - **Multi-Provider Routing**: Access NVIDIA NIM, Agnes AI, SenseNova, Google Gemini, and AMD Radeon endpoints through unified virtual model names with cascading fallbacks and usage-based load balancing.
-- **Load Balancing**: `simple-shuffle` (`routing_strategy` in `litellm/config.yaml`) routes to the least-utilized deployment per worker. Every Claude and Gemini alias holds two or more deployments — the two NVIDIA NIM aliases use two API keys each, `claude-sonnet-5` pairs Agnes AI and SenseNova with AMD Radeon's Qwen (three), and both Gemini aliases use two keys. `claude-fable-5-1` is the exception: a single AMD Radeon deployment with nothing to spread across.
+- **Load Balancing**: `simple-shuffle` (`routing_strategy` in `litellm/config.yaml`) routes to the least-utilized deployment per worker. The two NVIDIA NIM aliases (`claude-opus-5-5`, `claude-haiku-5-5`) use two API keys each, `claude-sonnet-5` pairs Agnes AI and SenseNova with AMD Radeon's Qwen (three deployments), and `gemini-3.5-flash-lite` uses two keys.
 - **Cascading Fallbacks**: every Claude alias follows the same ordered cascade —
   1. `gemini-3.5-flash-lite`
-  2. `gemini-3.1-flash-lite`
-- **AMD Radeon Model**: `claude-fable-5-1` exposes `Qwen3.8-Flash-Next` (AMD Radeon, `AMD_API_KEY`) as a single deployment — it cascades to Gemini on failure, unlike the old standalone `Qwen3.8` alias. AMD's `Qwen3.8-27B` is also a third `claude-sonnet-5` deployment, where it inherits the sonnet cascade.
+  2. `sensenova-6.8-flash-lite`
 - **Parameter Normalization**: Drops unsupported parameters (`drop_params: true`) for cross-provider compatibility.
-- **Tool Compatibility**: Automatically strips `strict: null` from tool definitions (`additional_drop_params` on every Gemini deployment) for backends that reject non-boolean values.
-- **Lean Health Check**: Container liveness uses a stdlib `urllib` probe (no `curl`/`requests` dependency), with a 180s start period (a cold start measured 129s) and 30s interval.
+- **Tool Compatibility**: Strips `strict: null` from tool definitions before sending to backends that reject non-boolean values (`additional_drop_params: ["tools[*].strict"]` on every Gemini deployment).
+- **Lean Health Check**: Container liveness uses a stdlib `urllib` probe (no `curl`/`requests` dependency), with a 180s start period (a cold start measured 129s) and 30s interval. (The config's `request_timeout` is 120s; the healthcheck start period is independent.)
 - **Resource-Tuned Container**: Pinned to 1 CPU / 3 GB RAM — measured at 1.05 GB idle and 1.40 GB under mixed traffic, since LiteLLM's 4 GB-per-worker floor is driven by its database engine and this deployment runs none — with 10 MB × 3 log rotation.
 - **Gunicorn-Supervised Worker**: `--run_gunicorn`, because uvicorn's own multiprocess manager pings each child with a hard-coded 5s timeout and kills workers that are still importing LiteLLM (measured: a 2-worker uvicorn boot killed 14 workers and took 129s to first liveliness, against 29s under Gunicorn).
 - **Build-Gated Streaming Image**: Builds `litellm-proxy:patched` on the pinned `litellm 1.105.1` base image, where the Nemotron thinking-stream defects that used to need a local source patch are fixed upstream. The build replays the failing chunk shape against the installed adapter and aborts if the behavior regresses.
