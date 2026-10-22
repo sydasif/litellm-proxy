@@ -1,13 +1,13 @@
 model_list:
   - model_name: claude-opus-5-5
     litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b
+      model: nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b
       api_key: os.environ/NVIDIA_API_KEY_1
     rpm: 15
 
   - model_name: claude-opus-5-5
     litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3-super-120b-a12b
+      model: nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b
       api_key: os.environ/NVIDIA_API_KEY_2
     rpm: 15
 
@@ -37,13 +37,13 @@ model_list:
 
   - model_name: claude-haiku-5-5
     litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b
+      model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b
       api_key: os.environ/NVIDIA_API_KEY_1
     rpm: 15
 
   - model_name: claude-haiku-5-5
     litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b
+      model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b
       api_key: os.environ/NVIDIA_API_KEY_2
     rpm: 15
 
