@@ -129,7 +129,7 @@ Source of truth for routing and provider settings. Key behaviors:
 
 **`additional_drop_params: ["tools[*].strict"]`** — Applied to all Gemini deployments. Strips `strict: null` from tool definitions before sending to backends that reject non-boolean values (fixes 400 validation errors from providers that apply strict type validation).
 
-**`general_settings`:** `master_key` auth only. The `trusted_proxy_ranges: []` key (which silenced the login-throttle warning at startup) and the `background_health_checks: true` / `health_check_interval: 300` keys (which made `/health` serve a cached snapshot instead of probing every deployment per call) have been **removed from the config** — `/health` therefore probes per call again. No `database_url` — single-instance, no PostgreSQL. Virtual keys/budgets/spend reports are in-memory only.
+**`general_settings`:** `master_key` auth only. The `trusted_proxy_ranges: []` key (which silenced the login-throttle warning at startup) and the `background_health_checks: true` / `health_check_interval: 300` keys (which made `/health/liveliness` serve a cached snapshot instead of probing every deployment per call) have been **removed from the config** — `/health/liveliness` therefore probes per call again. No `database_url` — single-instance, no PostgreSQL. Virtual keys/budgets/spend reports are in-memory only.
 
 ## Testing
 
