@@ -12,37 +12,7 @@ services:
     env_file:
       - ./.env
     command:
-      [
-        "--config",
-        "/app/config.yaml",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "4000",
-        # One worker: the proxy is I/O-bound, and a single worker also makes the
-        # router's cooldown/usage counters apply to every request instead of
-        # being split per process. Do NOT add --max_requests_before_restart
-        # here — with one worker there is no other worker to keep serving.
-        "--num_workers",
-        "1",
-        # Gunicorn's arbiter supervises the worker instead of uvicorn's
-        # multiprocess manager. litellm's docs call for Gunicorn whenever
-        # workers share a container, and it matters here: uvicorn 0.33 pings
-        # each child with a hard-coded 5s timeout
-        # (supervisors/multiprocess.py: `def ping(self, timeout: float = 5)`),
-        # so a child still importing litellm after 5s is killed and respawned —
-        # a 2-worker boot logged 14 such deaths and took 129s to first
-        # liveliness, against 29s under Gunicorn.
-        "--run_gunicorn",
-      ]
-    cpus: 1.0
-    # Sized from measurement, not from litellm's 4Gi-per-worker floor: that
-    # floor is set by the Prisma query engine's high-water mark, and this
-    # deployment runs no database. The worker measured 1.05GiB idle and 1.40GiB
-    # after mixed traffic, so 3g leaves roughly 2x headroom over the observed
-    # peak while keeping the rest of the host free. Raise it if a database is
-    # ever added.
-    mem_limit: 3g
+      ["--config", "/app/config.yaml", "--host", "0.0.0.0", "--port", "4000"]
     stop_grace_period: 1m
     restart: unless-stopped
     logging:
@@ -50,23 +20,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python3",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness')",
-        ]
-      interval: 30s # 30s detects unresponsiveness faster than 90s
-      timeout: 5s
-      retries: 3
-      # Cold start is dominated by litellm's imports, not by this probe: a
-      # restart measured 129s to first liveliness, so a 15s start period marked
-      # the container unhealthy for most of its boot. litellm's own Kubernetes
-      # example allows 120s for the first readiness check.
-      start_period: 180s
-
 networks:
   default:
     name: proxy
