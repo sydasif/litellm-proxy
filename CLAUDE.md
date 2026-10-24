@@ -8,7 +8,7 @@ AI Proxy Gateway that routes **Claude Code** through **LiteLLM** to multiple AI 
 
 **Single-user by design.** One Claude Code client shares this gateway, so every scaling knob is deliberately absent: no Redis (cooldowns are already coherent in the one worker), no worker pool to size, no admission control, no autoscaling, and no per-deployment `rpm`/`tpm` keys (the current `config.yaml` sets none). Had any deployment set `rpm`/`tpm`, litellm would read and enforce them pre-call (the deployment's `tpm`/`rpm` feed the usage counters and the pre-call check that raises when a deployment is over its limit) — for a single user that effect is that a burst can trip one deployment's ceiling and become a retry or a fallback rather than a rejection. Capacity is a non-goal; the routing config earns its keep on **failover and provider-latency hygiene** — that the one user's request never hangs and always ends on a model that answers. Tuning decisions here should be judged on the user's own perceived latency and on not wasting tokens on attempts that are going to be discarded, never on throughput.
 
-Binds on `0.0.0.0:4000` (host network must isolate this port). Uses Docker Compose to deploy a pinned LiteLLM image (`1.105.1`) whose Anthropic streaming adapter is verified at build time against the Nemotron thinking-stream defects that previously required a local source patch.
+Binds on `127.0.0.1:4000` on the host (container listens on `0.0.0.0:4000` internally via Docker port publishing). Uses Docker Compose to deploy a pinned LiteLLM image (`1.105.1`) whose Anthropic streaming adapter is verified at build time against the Nemotron thinking-stream defects that previously required a local source patch.
 
 ## Architecture
 
@@ -168,7 +168,7 @@ curl -s http://localhost:4000/v1/model/info \
 # Counters live in the single worker process, so these picks are coordinated across the
 # whole gateway rather than per process.
 for i in {1..6}; do
-  curl -s -D - http://0.0.0.0:4000/v1/chat/completions \
+  curl -s -D - http://127.0.0.1:4000/v1/chat/completions \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
     -d '{"model": "claude-sonnet-5", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 10}' | \

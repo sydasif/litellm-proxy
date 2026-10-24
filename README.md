@@ -4,7 +4,7 @@ An AI Proxy Gateway that routes **Claude Code** and other clients through **Lite
 
 It is a **single-user** gateway: one Claude Code client, so there is no worker pool to size, no Redis, no admission control and no autoscaling. The point of the routing config here is that a request never hangs and always lands on a model that answers — not throughput.
 
-Binds on `0.0.0.0:4000`; host network must isolate this port. Runs on the pinned `litellm 1.105.1` base image, whose Anthropic streaming adapter is verified at build time against the Nemotron thinking-stream defects that previously required a local source patch.
+Binds on `127.0.0.1:4000` on the host (container listens on `0.0.0.0:4000` internally via Docker port publishing). External access is blocked by the loopback bind. Runs on the pinned `litellm 1.105.1` base image, whose Anthropic streaming adapter is verified at build time against the Nemotron thinking-stream defects that previously required a local source patch.
 
 ---
 
@@ -104,7 +104,7 @@ curl -X POST http://localhost:4000/v1/chat/completions \
 
 ```
 litellm-proxy/
-├── docker-compose.yml          # Docker Compose configuration (1 gunicorn worker, no DB/Redis; binds 0.0.0.0:4000)
+├── docker-compose.yml          # Docker Compose configuration (1 gunicorn worker, no DB/Redis; binds 127.0.0.1:4000 on host)
 ├── Dockerfile                  # Builds litellm-proxy:patched with SSE streaming fix
 ├── .dockerignore               # Keeps .env, .git, docs, caches out of the build context
 ├── patches/
