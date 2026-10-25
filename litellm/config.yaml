@@ -81,6 +81,12 @@ litellm_settings:
   use_chat_completions_url_for_anthropic_messages: true
   request_timeout: 60
   http2: true
+  cache: True
+  cache_params:
+    type: local
+    ttl: 300
+    supported_call_types:
+      - "acompletion"
 
 router_settings:
   routing_strategy: simple-shuffle

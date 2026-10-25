@@ -269,8 +269,70 @@ class ProxyTest:
         )
 
     # ------------------------------------------------------------------
-    # 6. Fallback chain validation
+    # 6. Cache ping
     # ------------------------------------------------------------------
+    def test_cache_ping(self) -> None:
+        t0 = time.monotonic()
+        code, body = _get("cache/ping", timeout=5)
+        ms = (time.monotonic() - t0) * 1000
+        ok = code == 200 and isinstance(body, dict) and body.get("status") == "healthy"
+        detail = f"status={code} cache_type={body.get('cache_type') if isinstance(body, dict) else body}"
+        self.record("cache/ping", ok, ms, detail)
+
+    # ------------------------------------------------------------------
+    # 7. Cache hit / miss on chat completions
+    # ------------------------------------------------------------------
+    def test_cache_hit_miss(self) -> None:
+        body = {
+            "model": "claude-haiku-5-5",
+            "messages": [{"role": "user", "content": "Say ok in one word"}],
+            "max_tokens": 10,
+        }
+        # First call — should be a miss (cold cache)
+        t0 = time.monotonic()
+        code1, body1 = _post("v1/chat/completions", dict(body), timeout=self.timeout)
+        ms1 = (time.monotonic() - t0) * 1000
+        # Second call — identical request, should be a hit
+        t0 = time.monotonic()
+        code2, body2 = _post("v1/chat/completions", dict(body), timeout=self.timeout)
+        ms2 = (time.monotonic() - t0) * 1000
+
+        hit = code1 == 200 and code2 == 200
+        self.record(
+            "cache/hit-miss",
+            hit,
+            (ms1 + ms2) / 2,
+            f"first={code1} in {ms1:.0f}ms second={code2} in {ms2:.0f}ms "
+            f"(cache hit means identical response served faster)",
+        )
+
+    # ------------------------------------------------------------------
+    # 8. Cache miss on changed request
+    # ------------------------------------------------------------------
+    def test_cache_miss_on_change(self) -> None:
+        body_a = {
+            "model": "claude-haiku-5-5",
+            "messages": [{"role": "user", "content": "Say exactly alpha"}],
+            "max_tokens": 10,
+        }
+        body_b = {
+            "model": "claude-haiku-5-5",
+            "messages": [{"role": "user", "content": "Say exactly beta"}],
+            "max_tokens": 10,
+        }
+        code_a, body_a_resp = _post("v1/chat/completions", dict(body_a), timeout=self.timeout)
+        code_b, body_b_resp = _post("v1/chat/completions", dict(body_b), timeout=self.timeout)
+        ok = code_a == 200 and code_b == 200
+        msg_a = (body_a_resp.get("choices", [{}])[0].get("message", {}) if isinstance(body_a_resp, dict) else {})
+        msg_b = (body_b_resp.get("choices", [{}])[0].get("message", {}) if isinstance(body_b_resp, dict) else {})
+        text_a = (msg_a.get("content") or msg_a.get("reasoning_content") or "")
+        text_b = (msg_b.get("content") or msg_b.get("reasoning_content") or "")
+        self.record(
+            "cache/miss-on-change",
+            ok,
+            0,
+            f"alpha='{text_a[:30]}' beta='{text_b[:30]}' (different prompts must not share cache entry)",
+        )
     def test_fallback_chain(self) -> None:
         """Validate that the fallback model itself responds (we can't easily
         force primary failure without mock endpoints, so we test the fallback
@@ -343,6 +405,12 @@ class ProxyTest:
         self.test_streaming()
         print()
         self.test_load_balance()
+        print()
+        self.test_cache_ping()
+        print()
+        self.test_cache_hit_miss()
+        print()
+        self.test_cache_miss_on_change()
         print()
         self.test_fallback_chain()
         print()
