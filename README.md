@@ -1,101 +1,68 @@
 # AI Proxy Gateway
 
-An AI Proxy Gateway that routes **Claude Code** and other clients through **LiteLLM** to multiple AI backend providers (NVIDIA NIM, Agnes AI, SenseNova, Google Gemini, AMD Radeon) with load balancing and cascading fallbacks. Runs as a **single-worker** instance (`--num_workers 1`, supervised by Gunicorn) so the router's cooldown/usage counters apply to every request — no Postgres/Redis required. Sized at 1 vCPU / 3 GB to leave room on the host for other services.
-
-It is a **single-user** gateway: one Claude Code client, so there is no worker pool to size, no Redis, no admission control and no autoscaling. The point of the routing config here is that a request never hangs and always lands on a model that answers — not throughput.
-
-Binds on `127.0.0.1:4000` on the host (container listens on `0.0.0.0:4000` internally via Docker port publishing). External access is blocked by the loopback bind. Runs on the pinned `litellm 1.105.1` base image, whose Anthropic streaming adapter is verified at build time against the Nemotron thinking-stream defects that previously required a local source patch.
+Routes **Claude Code** through **LiteLLM** to five providers (NVIDIA NIM, Agnes AI, SenseNova, Google Gemini, AMD Radeon) with load balancing and cascading fallbacks. Single Gunicorn worker, no Redis or Postgres. Binds to `127.0.0.1:4000`.
 
 ---
 
 ## Features
 
-- **Multi-Provider Routing**: Access NVIDIA NIM, Agnes AI, SenseNova, Google Gemini, and AMD Radeon endpoints through unified virtual model names with cascading fallbacks and usage-based load balancing.
-- **Load Balancing**: `simple-shuffle` (`routing_strategy` in `litellm/config.yaml`) routes to the least-utilized deployment per worker. The two NVIDIA NIM aliases (`claude-opus-5-5`, `claude-haiku-5-5`) use two API keys each, `claude-sonnet-5` pairs Agnes AI with AMD Radeon's Qwen (two deployments), and `gemini-3.5-flash-lite` uses two keys.
-- **Cascading Fallbacks**: every Claude alias follows the same ordered cascade —
-  1. `gemini-3.5-flash-lite`
-  2. `sensenova-6.8-flash-lite`
-- **Parameter Normalization**: Drops unsupported parameters (`drop_params: true`) for cross-provider compatibility.
-- **Tool Compatibility**: Strips `strict: null` from tool definitions before sending to backends that reject non-boolean values (`additional_drop_params: ["tools[*].strict"]` on every Gemini deployment).
-- **Lean Health Check**: Container liveness uses a stdlib `urllib` probe (no `curl`/`requests` dependency), with a 180s start period (a cold start measured 129s) and 30s interval. (The config's `request_timeout` is 120s; the healthcheck start period is independent.)
-- **Resource-Tuned Container**: Pinned to 1 CPU / 3 GB RAM — measured at 1.05 GB idle and 1.40 GB under mixed traffic, since LiteLLM's 4 GB-per-worker floor is driven by its database engine and this deployment runs none — with 10 MB × 3 log rotation.
-- **Gunicorn-Supervised Worker**: `--run_gunicorn`, because uvicorn's own multiprocess manager pings each child with a hard-coded 5s timeout and kills workers that are still importing LiteLLM (measured: a 2-worker uvicorn boot killed 14 workers and took 129s to first liveliness, against 29s under Gunicorn).
-- **Build-Gated Streaming Image**: Builds `litellm-proxy:patched` on the pinned `litellm 1.105.1` base image, where the Nemotron thinking-stream defects that used to need a local source patch are fixed upstream. The build replays the failing chunk shape against the installed adapter and aborts if the behavior regresses.
-- **Single-Worker Design**: One worker process (`--num_workers 1`) under Gunicorn. In-memory state (router cooldowns, usage counters, request spend) is shared by every request, which the multi-worker setup could not do without Redis. No external database, Redis, or UI required.
-- **Health Checks**: Liveness (`/health/liveliness`) and readiness (`/health/readiness`) endpoints.
-- **Lean Build Context**: `.dockerignore` excludes `.env`, `.env.*` (except `.env.example`), `.git/`, `.claude/`, `.gitignore`, `LICENSE`, all markdown (`*.md`), images (`logo.png`), docker compose files (`docker-compose*.yml`), and caches from the Docker build context.
+- Multi-provider virtual model routing with `simple-shuffle` load balancing
+- Cascading fallbacks: `gemini-3.5-flash-lite` → `sensenova-6.8-flash-lite`
+- Anthropic `/v1/messages` → OpenAI `/chat/completions` translation
+- `drop_params` + `additional_drop_params` for cross-provider parameter normalization
+- Build-gated streaming verification (aborts build if Nemotron streaming invariants regress)
 
 ---
 
-## Prerequisites
+## Model Mapping
 
-- [Docker](https://docs.docker.com/get-docker/) & Docker Compose
+| Virtual Model              | Deployment 1                                                       | Deployment 2                                                      |
+| -------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| `claude-opus-5-5`          | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (NVIDIA key 1)      | `openai/Qwen3.8-27B` (AMD Radeon)                                 |
+| `claude-sonnet-5`          | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (NVIDIA key 2) | `openai/agnes-2.5-flash` (Agnes AI)                               |
+| `claude-haiku-5-5`         | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (NVIDIA key 1)  | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (NVIDIA key 2) |
+| `gemini-3.5-flash-lite`    | `gemini/gemini-3.5-flash-lite` (key 1)                             | `gemini/gemini-3.5-flash-lite` (key 2)                            |
+| `sensenova-6.8-flash-lite` | `openai/sensenova-6.8-flash-lite` (SenseNova)                      | —                                                                 |
 
----
-
-## Setup & Installation
-
-1. **Clone and configure environment:**
-
-   ```bash
-   git clone <repository-url>
-   cd litellm-proxy
-   cp .env.example .env
-   ```
-
-2. **Generate master key and populate `.env` with your provider API keys:**
-
-   ```bash
-   cat >> .env <<EOF
-   LITELLM_MASTER_KEY="sk-$(openssl rand -hex 24)"
-   EOF
-   ```
-
-   _(Be sure to edit `.env` and add your `NVIDIA_API_KEY_1`, `NVIDIA_API_KEY_2`, `AGNES_API_KEY`, `SENSENOVA_API_KEY`, `GEMINI_API_KEY_1`, `GEMINI_API_KEY_2`, and `AMD_API_KEY`)_
-
-3. **Start the proxy stack** (builds the patched image on first run — `up` alone reuses an existing image, so run `docker compose build --no-cache litellm` after a `Dockerfile`/base-image change):
-
-   ```bash
-   docker compose up -d
-   ```
-
-4. **Verify health:**
-
-   ```bash
-   curl http://localhost:4000/health/liveliness
-   curl http://localhost:4000/health/readiness
-   ```
+> `nemotron-3-ultra-550b-a55b` answers in ~300-800ms with no stall observed — the historical 700s zero-byte hang no longer reproduces.
 
 ---
 
-## Usage & API Authentication
+## Setup
 
-All requests to the proxy use your `LITELLM_MASTER_KEY` as a Bearer token.
+```bash
+git clone <repository-url> && cd litellm-proxy
+cp .env.example .env
+# Edit .env: fill in NVIDIA_API_KEY_1, NVIDIA_API_KEY_2, AGNES_API_KEY,
+# SENSENOVA_API_KEY, GEMINI_API_KEY_1, GEMINI_API_KEY_2, AMD_API_KEY,
+# and generate LITELLM_MASTER_KEY="sk-$(openssl rand -hex 24)"
 
-### Connecting Claude Code
+docker compose up -d
+curl http://localhost:4000/health/liveliness
+```
 
-Configure environment variables in your shell profile (`~/.bashrc` or `~/.zshrc`):
+---
+
+## Usage
+
+### Claude Code
 
 ```bash
 export ANTHROPIC_AUTH_TOKEN=$LITELLM_MASTER_KEY
 export ANTHROPIC_BASE_URL=http://localhost:4000
 ```
 
-### Testing the Proxy
-
-List available models:
+### curl
 
 ```bash
 curl -H "Authorization: Bearer $LITELLM_MASTER_KEY" http://localhost:4000/v1/models
 ```
 
-Test a chat completion:
-
 ```bash
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"model": "claude-opus-5-5", "messages": [{"role": "user", "content": "Hello!"}], "max_tokens": 100}'
+  -d '{"model": "claude-opus-5-5", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 100}'
 ```
 
 ---
@@ -104,51 +71,27 @@ curl -X POST http://localhost:4000/v1/chat/completions \
 
 ```
 litellm-proxy/
-├── docker-compose.yml          # Docker Compose configuration (1 gunicorn worker, no DB/Redis; binds 127.0.0.1:4000 on host)
-├── Dockerfile                  # Builds litellm-proxy:patched with SSE streaming fix
-├── .dockerignore               # Keeps .env, .git, docs, caches out of the build context
+├── docker-compose.yml
+├── Dockerfile
 ├── patches/
-│   ├── verify_upstream_anthropic_streaming.py  # Build gate: replays the Nemotron stream shape
-│   └── fix_nemotron_thinking_stream.py         # Legacy source patch (<=1.92.x layout, not applied)
-├── litellm/
-│   └── config.yaml             # Router and provider settings
-├── .env.example                # Template for environment variables
-└── README.md                   # Project documentation
+│   ├── verify_upstream_anthropic_streaming.py   # build gate
+│   └── fix_nemotron_thinking_stream.py          # legacy (≤1.92.x, not applied)
+├── litellm/config.yaml
+└── .env.example
 ```
 
 ---
 
 ## Maintenance
 
-| Task                     | Command                                                           |
-| :----------------------- | :---------------------------------------------------------------- |
-| Update API keys          | Edit `.env` file, then restart                                    |
-| Modify routing/providers | Edit `litellm/config.yaml`, then restart                          |
-| Restart proxy            | `docker compose down && docker compose up -d`                     |
-| Rebuild image            | `docker compose build --no-cache litellm && docker compose up -d` |
-| Run the streaming gate   | `python3 patches/verify_upstream_anthropic_streaming.py`          |
-| View logs                | `docker compose logs -f`                                          |
-
----
-
-## Security
-
-- API keys are stored exclusively in environment variables (`.env` file).
-- `.env` file is gitignored to prevent accidental exposure of secrets.
-- `.dockerignore` keeps `.env` and `.git/` out of the Docker build context, so secrets are never shipped to the Docker daemon.
-
----
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'feat(proxy): add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+| Task                        | Command                                                           |
+| --------------------------- | ----------------------------------------------------------------- |
+| Restart after config change | `docker compose down && docker compose up -d`                     |
+| Rebuild after image change  | `docker compose build --no-cache litellm && docker compose up -d` |
+| View logs                   | `docker compose logs -f`                                          |
 
 ---
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE).
