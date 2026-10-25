@@ -20,8 +20,3 @@ FROM docker.litellm.ai/berriai/litellm:1.105.1
 # 4. empty choices chunks skipped instead of raising IndexError.
 #
 # No local patch is applied — the base image contains the fixes.
-
-# Gate the build on the behavior this image depends on: the installed adapter
-# still produces clean streaming output for Nemotron-style reasoning chunks.
-# If a base-image bump reintroduces one of the four defects, re-target the
-# verification logic and restore it here before shipping the image.

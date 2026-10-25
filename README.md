@@ -10,7 +10,9 @@ Routes **Claude Code** through **LiteLLM** to five providers (NVIDIA NIM, Agnes 
 - Cascading fallbacks: `gemini-3.5-flash-lite` → `sensenova-6.8-flash-lite`
 - Anthropic `/v1/messages` → OpenAI `/chat/completions` translation
 - `drop_params` + `additional_drop_params` for cross-provider parameter normalization
-- Build-gated streaming verification (aborts build if Nemotron streaming invariants regress)
+- Per-deployment timeouts (`timeout`, `stream_timeout`, `keepalive_seconds`) on every backend
+- `request_timeout: 60` global cap; `num_retries: 1` for faster fallback escalation
+- `http2: true` for outbound provider traffic (v1.103+)
 
 ---
 
@@ -73,6 +75,8 @@ curl -X POST http://localhost:4000/v1/chat/completions \
 litellm-proxy/
 ├── docker-compose.yml
 ├── Dockerfile
+├── patches/
+│   └── proxy_test.py                 # test harness — validates all endpoints and config
 ├── litellm/config.yaml
 └── .env.example
 ```

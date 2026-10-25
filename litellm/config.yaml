@@ -84,7 +84,7 @@ litellm_settings:
 
 router_settings:
   routing_strategy: simple-shuffle
-  num_retries: 1 # fall back sooner — one attempt per deployment before escalating
+  num_retries: 1 # one retry per deployment (2 attempts total) before fallbacks
   cooldown_time: 50 # Shorter cooldown for transient errors
   allowed_fails: 3 # Fails per minute before a deployment is cooled down (default)
 

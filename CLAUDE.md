@@ -4,7 +4,7 @@ Guidance for working with this repository.
 
 ## Project Overview
 
-AI Proxy Gateway routing **Claude Code** through **LiteLLM** to NVIDIA NIM, Agnes AI, SenseNova, Google Gemini, AMD Radeon. Single Gunicorn worker (`--num_workers 1`), in-memory router state (no Redis/Postgres). Binds `127.0.0.1:4000` on host (container `0.0.0.0:4000`). Pinned `litellm:1.105.1` with build-time streaming verification.
+AI Proxy Gateway routing **Claude Code** through **LiteLLM** to NVIDIA NIM, Agnes AI, SenseNova, Google Gemini, AMD Radeon. Single Gunicorn worker (`--num_workers 1`), in-memory router state (no Redis/Postgres). Binds `127.0.0.1:4000` on host (container `0.0.0.0:4000`). Pinned `litellm:1.105.1`. Four Nemotron thinking-stream defects fixed upstream — no local patch, no build-time verification step.
 
 **Single-user.** No worker pool, no autoscaling, no per-deployment `rpm`/`tpm`. Routing exists for failover/latency hygiene, not throughput.
 
@@ -25,9 +25,9 @@ AI Proxy Gateway routing **Claude Code** through **LiteLLM** to NVIDIA NIM, Agne
 1. `gemini-3.5-flash-lite`
 2. `sensenova-6.8-flash-lite`
 
-**Router settings:** `routing_strategy: simple-shuffle`, `num_retries: 2`, `cooldown_time: 50`, `allowed_fails: 3`, `fallbacks` nested under `router_settings` (top-level is silently dropped).
+**Router settings:** `routing_strategy: simple-shuffle`, `num_retries: 1`, `cooldown_time: 50`, `allowed_fails: 3`, `fallbacks` nested under `router_settings` (top-level is silently dropped).
 
-**Timeouts:** `request_timeout: 120` is the only timeout. No per-deployment `timeout` (removed in `00be96f`). `nemotron-3-ultra-550b-a55b` answers in ~300-800ms with no stall — the historical 700s zero-byte hang no longer reproduces. Theoretical worst case if a stall ever returns: ~(num_retries + 1) × request_timeout ≈ 6 min before fallback fires.
+**Timeouts:** `request_timeout: 60` is the global cap. Per-deployment `timeout` (20–30s) and `stream_timeout` (8–10s) are set on every deployment, so a stalled provider is cut off before the global cap binds. `keepalive_seconds: 15` on NIM deployments prevents idle-drop during thinking gaps. Theoretical worst case before fallback: one attempt at per-deployment `timeout` (~30s) + fallback latency ≈ 30–90s (down from ~6 min at the old 120s × 3 attempts).
 
 ## Key Behaviors
 
@@ -58,6 +58,9 @@ docker compose logs -f
 
 # Validate config
 python -c "import yaml; yaml.safe_load(open('litellm/config.yaml'))"
+
+# Full proxy test suite (health, models, chat, streaming, fallbacks, timeouts)
+python3 patches/proxy_test.py --timeout 15 --stream-timeout 8
 ```
 
 ## Testing
