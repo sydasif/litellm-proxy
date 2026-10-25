@@ -73,9 +73,6 @@ curl -X POST http://localhost:4000/v1/chat/completions \
 litellm-proxy/
 ├── docker-compose.yml
 ├── Dockerfile
-├── patches/
-│   ├── verify_upstream_anthropic_streaming.py   # build gate
-│   └── fix_nemotron_thinking_stream.py          # legacy (≤1.92.x, not applied)
 ├── litellm/config.yaml
 └── .env.example
 ```

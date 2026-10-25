@@ -56,9 +56,6 @@ docker compose down && docker compose up -d
 # View logs
 docker compose logs -f
 
-# Streaming verification gate (needs litellm importable)
-python3 patches/verify_upstream_anthropic_streaming.py
-
 # Validate config
 python -c "import yaml; yaml.safe_load(open('litellm/config.yaml'))"
 ```
@@ -105,7 +102,7 @@ Image pinned to `docker.litellm.ai/berriai/litellm:1.105.1`. Four Nemotron think
 | Text in combined chunk silently dropped                                     | #34795                     |
 | `IndexError` on empty `choices`                                             | `_handle_choiceless_chunk` |
 
-`Dockerfile` runs `patches/verify_upstream_anthropic_streaming.py` at build time — replays the failing Nemotron chunk shape, exits non-zero if any invariant regressed.
+The streaming verification step was removed alongside the patch scripts — the four defects are confirmed fixed in 1.105.1. If a base-image bump reintroduces them, re-add the verification gate before shipping.
 
 **On base-image bump:**
 
@@ -121,4 +118,4 @@ curl -sN 'http://localhost:4000/v1/messages?beta=true' \
 
 Expected: first `content_block_start` opens as `thinking`, `thinking_delta` stays in thinking block, no `IndexError`.
 
-`patches/fix_nemotron_thinking_stream.py` is **kept but not applied** — targets `experimental_pass_through/adapters` layout (≤1.92.x). Adapter moved to `pass_through/adapters` in 1.10x.
+`patches/fix_nemotron_thinking_stream.py` was removed — the four defects it addressed are fixed upstream in 1.105.1, so the local patch is no longer needed.
