@@ -27,7 +27,7 @@ AI Proxy Gateway routing **Claude Code** through **LiteLLM** to NVIDIA NIM, Agne
 
 **Router settings:** `routing_strategy: simple-shuffle`, `num_retries: 1`, `cooldown_time: 50`, `allowed_fails: 3`, `fallbacks` nested under `router_settings` (top-level is silently dropped).
 
-**Timeouts:** `request_timeout: 60` is the global cap. Per-deployment `timeout` (20–30s) and `stream_timeout` (8–10s) are set on every deployment, so a stalled provider is cut off before the global cap binds. `keepalive_seconds: 15` on NIM deployments prevents idle-drop during thinking gaps. Theoretical worst case before fallback: one attempt at per-deployment `timeout` (~30s) + fallback latency ≈ 30–90s (down from ~6 min at the old 120s × 3 attempts).
+**Timeouts:** `request_timeout: 60` is the global cap. Per-deployment `timeout` (20–30s) and `stream_timeout` (8–10s) are set on every deployment, so a stalled provider is cut off before the global cap binds. `keepalive_seconds: 15` on NIM deployments prevents idle-drop during thinking gaps. Local response cache is initialized (`cache: True`, `type: local`, `ttl: 300`) but no call types are cached (`supported_call_types: []`) because caching streaming SSE responses corrupts `content_block` structure (text instead of thinking). Theoretical worst case before fallback: one attempt at per-deployment `timeout` (~30s) + fallback latency ≈ 30–90s (down from ~6 min at the old 120s × 3 attempts).
 
 ## Key Behaviors
 

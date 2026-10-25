@@ -13,6 +13,7 @@ Routes **Claude Code** through **LiteLLM** to five providers (NVIDIA NIM, Agnes 
 - Per-deployment timeouts (`timeout`, `stream_timeout`, `keepalive_seconds`) on every backend
 - `request_timeout: 60` global cap; `num_retries: 1` for faster fallback escalation
 - `http2: true` for outbound provider traffic (v1.103+)
+- Local response cache initialized (enabled but no call types cached — streaming SSE blocks get corrupted, disabled via `supported_call_types: []`)
 
 ---
 
