@@ -247,25 +247,22 @@ class ProxyTest:
     # ------------------------------------------------------------------
     def test_load_balance(self) -> None:
         model = "claude-sonnet-5"
-        # Send 6 requests; expect at least 2 different deployment IDs
         t0 = time.monotonic()
-        model_ids: set = set()
-        for i in range(6):
+        statuses = []
+        for _ in range(6):
             code, body = _post("v1/chat/completions", {
                 "model": model,
                 "messages": [{"role": "user", "content": "hi"}],
                 "max_tokens": 5,
             }, timeout=10)
-            if code == 200 and isinstance(body, dict):
-                # The model-id header would be ideal but we only have the body
-                # Try to infer from response structure (deployment-specific quirks)
-                pass
+            statuses.append(code)
         ms = (time.monotonic() - t0) * 1000
+        ok = all(s == 200 for s in statuses)
         self.record(
             "load-balance/sonnet-distribution",
-            True,
+            ok,
             ms,
-            "sent 6 requests; check logs for x-litellm-model-id variation",
+            f"6 requests all 200: {statuses}",
         )
 
     # ------------------------------------------------------------------
@@ -333,6 +330,55 @@ class ProxyTest:
             0,
             f"alpha='{text_a[:30]}' beta='{text_b[:30]}' (different prompts must not share cache entry)",
         )
+    def test_messages_endpoint(self) -> None:
+        """Non-streaming Anthropic /v1/messages (core Claude Code path)."""
+        for model in ["claude-opus-5-5", "claude-sonnet-5", "claude-haiku-5-5"]:
+            t0 = time.monotonic()
+            code, body = _post("v1/messages?beta=true", {
+                "model": model,
+                "max_tokens": 20,
+                "messages": [{"role": "user", "content": "Say hi"}],
+            }, timeout=self.timeout)
+            ms = (time.monotonic() - t0) * 1000
+            ok = code == 200 and isinstance(body, dict)
+            detail = f"status={code}"
+            if isinstance(body, dict):
+                content = body.get("content", "")
+                text = ""
+                if isinstance(content, list):
+                    text = "".join(c.get("text", "") for c in content if c.get("type") == "text")
+                    if not text:
+                        text = "".join(c.get("thinking", "") for c in content if c.get("type") == "thinking")
+                else:
+                    text = str(content)[:60]
+                detail += f" text_len={len(text)}"
+                ok = ok and bool(text)
+            self.record(f"messages/{model}", ok, ms, detail)
+
+    def test_invalid_model(self) -> None:
+        t0 = time.monotonic()
+        code, body = _post("v1/chat/completions", {
+            "model": "does-not-exist",
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_tokens": 5,
+        }, timeout=10)
+        ms = (time.monotonic() - t0) * 1000
+        ok = code != 200
+        self.record("invalid/model", ok, ms, f"status={code} body={str(body)[:150]}")
+
+    def test_streaming_fallback_models(self) -> None:
+        for model in ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]:
+            t0 = time.monotonic()
+            code, body = _post("v1/chat/completions", {
+                "model": model,
+                "stream": True,
+                "messages": [{"role": "user", "content": "hi"}],
+                "max_tokens": 10,
+            }, timeout=self.timeout)
+            ms = (time.monotonic() - t0) * 1000
+            ok = code == 200 and isinstance(body, str)
+            self.record(f"stream-fallback/{model}", ok, ms, f"status={code}")
+
     def test_fallback_chain(self) -> None:
         """Validate that the fallback model itself responds (we can't easily
         force primary failure without mock endpoints, so we test the fallback
@@ -364,13 +410,16 @@ class ProxyTest:
     # 7. Timeout enforcement (per-deployment)
     # ------------------------------------------------------------------
     def test_timeout_config(self) -> None:
-        """Read deployment timeout settings from /v1/model/info and report."""
+        """Read deployment timeout settings from /v1/model/info and assert every
+        deployment has per-deployment timeout + stream_timeout set."""
         t0 = time.monotonic()
         code, body = _get("v1/model/info", timeout=10)
         ms = (time.monotonic() - t0) * 1000
         ok = code == 200 and isinstance(body, dict)
         deployments = body.get("data", []) if ok else []
         summary = []
+        missing_timeout = []
+        missing_stream_timeout = []
         for d in deployments:
             name = d.get("model_name", "?")
             actual = d.get("litellm_params", {}).get("model", "?")
@@ -378,6 +427,15 @@ class ProxyTest:
             st = d.get("litellm_params", {}).get("stream_timeout", "unset")
             kk = d.get("litellm_params", {}).get("keepalive_seconds", "unset")
             summary.append(f"  {name:25s} -> {actual:45s}  timeout={t}  stream_timeout={st}  keepalive={kk}")
+            if t == "unset":
+                missing_timeout.append(actual)
+            if st == "unset":
+                missing_stream_timeout.append(actual)
+        ok = ok and not missing_timeout and not missing_stream_timeout
+        if missing_timeout:
+            summary.append(f"  MISSING timeout: {missing_timeout}")
+        if missing_stream_timeout:
+            summary.append(f"  MISSING stream_timeout: {missing_stream_timeout}")
         self.record(
             "timeout-config",
             ok,
@@ -411,6 +469,12 @@ class ProxyTest:
         self.test_cache_hit_miss()
         print()
         self.test_cache_miss_on_change()
+        print()
+        self.test_messages_endpoint()
+        print()
+        self.test_invalid_model()
+        print()
+        self.test_streaming_fallback_models()
         print()
         self.test_fallback_chain()
         print()
