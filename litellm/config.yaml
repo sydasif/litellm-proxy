@@ -85,8 +85,7 @@ litellm_settings:
   cache_params:
     type: local
     ttl: 300
-    supported_call_types:
-      - "acompletion"
+    supported_call_types: []
 
 router_settings:
   routing_strategy: simple-shuffle
