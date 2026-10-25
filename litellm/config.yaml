@@ -3,6 +3,9 @@ model_list:
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
       api_key: os.environ/NVIDIA_API_KEY_1
+      timeout: 30
+      stream_timeout: 10
+      keepalive_seconds: 15
 
   - model_name: claude-opus-5-5
     litellm_params:
@@ -10,11 +13,16 @@ model_list:
       api_base: https://developer.amd.com.cn/radeon/api/v1
       api_key: os.environ/AMD_API_KEY
       use_chat_completions_api: true
+      timeout: 30
+      stream_timeout: 10
 
   - model_name: claude-sonnet-5
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b
       api_key: os.environ/NVIDIA_API_KEY_2
+      timeout: 30
+      stream_timeout: 10
+      keepalive_seconds: 15
 
   - model_name: claude-sonnet-5
     litellm_params:
@@ -22,16 +30,24 @@ model_list:
       api_base: https://apihub.agnes-ai.com/v1
       api_key: os.environ/AGNES_API_KEY
       use_chat_completions_api: true
+      timeout: 20
+      stream_timeout: 8
 
   - model_name: claude-haiku-5-5
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b
       api_key: os.environ/NVIDIA_API_KEY_1
+      timeout: 20
+      stream_timeout: 8
+      keepalive_seconds: 15
 
   - model_name: claude-haiku-5-5
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b
       api_key: os.environ/NVIDIA_API_KEY_2
+      timeout: 20
+      stream_timeout: 8
+      keepalive_seconds: 15
 
   # fallback models
 
@@ -40,12 +56,16 @@ model_list:
       model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY_1
       additional_drop_params: ["tools[*].strict"]
+      timeout: 20
+      stream_timeout: 8
 
   - model_name: gemini-3.5-flash-lite
     litellm_params:
       model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY_2
       additional_drop_params: ["tools[*].strict"]
+      timeout: 20
+      stream_timeout: 8
 
   - model_name: sensenova-6.8-flash-lite
     litellm_params:
@@ -53,15 +73,18 @@ model_list:
       api_base: https://token.sensenova.ai/v1
       api_key: os.environ/SENSENOVA_API_KEY
       use_chat_completions_api: true
+      timeout: 30
+      stream_timeout: 10
 
 litellm_settings:
   drop_params: true
   use_chat_completions_url_for_anthropic_messages: true
-  request_timeout: 120
+  request_timeout: 60
+  http2: true
 
 router_settings:
   routing_strategy: simple-shuffle
-  num_retries: 2 # Retry twice before tripping fallback
+  num_retries: 1 # fall back sooner — one attempt per deployment before escalating
   cooldown_time: 50 # Shorter cooldown for transient errors
   allowed_fails: 3 # Fails per minute before a deployment is cooled down (default)
 
