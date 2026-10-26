@@ -7,7 +7,7 @@ Routes **Claude Code** through **LiteLLM** to five providers (NVIDIA NIM, Agnes 
 ## Features
 
 - Multi-provider virtual model routing with `simple-shuffle` load balancing
-- Cascading fallbacks: `gemini-3.5-flash-lite` → `sensenova-6.8-flash-lite`
+- Cascading fallbacks: `gemini-3.5-flash-lite` → `sensenova-6.8-flash-lite`; `sensenova-6.8-flash-lite` → `gemini-3.5-flash-lite`
 - Anthropic `/v1/messages` → OpenAI `/chat/completions` translation
 - `drop_params` + `additional_drop_params` for cross-provider parameter normalization
 - Per-deployment timeouts (`timeout`, `stream_timeout`, `keepalive_seconds`) on every backend
