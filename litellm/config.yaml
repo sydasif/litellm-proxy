@@ -97,6 +97,7 @@ router_settings:
     - claude-opus-5-5: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]
     - claude-sonnet-5: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]
     - claude-haiku-5-5: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]
+    - sensenova-6.8-flash-lite: ["gemini-3.5-flash-lite"]
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
