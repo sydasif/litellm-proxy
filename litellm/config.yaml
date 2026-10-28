@@ -3,57 +3,45 @@ model_list:
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
       api_key: os.environ/NVIDIA_API_KEY_1
-      stream_timeout: 10
 
   - model_name: claude-opus-5-5
     litellm_params:
-      model: openai/Qwen3.8-27B
-      api_base: https://developer.amd.com.cn/radeon/api/v1
-      api_key: os.environ/AMD_API_KEY
-      use_chat_completions_api: true
-      stream_timeout: 10
+      model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
+      api_key: os.environ/NVIDIA_API_KEY_2
+
+  - model_name: claude-sonnet-5
+    litellm_params:
+      model: nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b
+      api_key: os.environ/NVIDIA_API_KEY_1
 
   - model_name: claude-sonnet-5
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b
       api_key: os.environ/NVIDIA_API_KEY_2
-      stream_timeout: 10
-
-  - model_name: claude-sonnet-5
-    litellm_params:
-      model: openai/agnes-2.5-flash
-      api_base: https://apihub.agnes-ai.com/v1
-      api_key: os.environ/AGNES_API_KEY
-      use_chat_completions_api: true
-      stream_timeout: 10
 
   - model_name: claude-haiku-5-5
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b
       api_key: os.environ/NVIDIA_API_KEY_1
-      stream_timeout: 10
 
   - model_name: claude-haiku-5-5
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b
       api_key: os.environ/NVIDIA_API_KEY_2
-      stream_timeout: 10
 
-  # fallback models
+  # others models
 
   - model_name: gemini-3.5-flash-lite
     litellm_params:
       model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY_1
       additional_drop_params: ["tools[*].strict"]
-      stream_timeout: 10
 
   - model_name: gemini-3.5-flash-lite
     litellm_params:
       model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY_2
       additional_drop_params: ["tools[*].strict"]
-      stream_timeout: 10
 
   - model_name: sensenova-6.8-flash-lite
     litellm_params:
@@ -61,7 +49,20 @@ model_list:
       api_base: https://token.sensenova.ai/v1
       api_key: os.environ/SENSENOVA_API_KEY
       use_chat_completions_api: true
-      stream_timeout: 10
+
+  - model_name: qwen3.8-27b
+    litellm_params:
+      model: openai/Qwen3.8-27B
+      api_base: https://developer.amd.com.cn/radeon/api/v1
+      api_key: os.environ/AMD_API_KEY
+      use_chat_completions_api: true
+
+  - model_name: agnes-2.5-flash
+    litellm_params:
+      model: openai/agnes-2.5-flash
+      api_base: https://apihub.agnes-ai.com/v1
+      api_key: os.environ/AGNES_API_KEY
+      use_chat_completions_api: true
 
 litellm_settings:
   drop_params: true
@@ -80,10 +81,13 @@ router_settings:
   cooldown_time: 30 # Shorter cooldown for transient errors
 
   fallbacks:
-    - claude-opus-5-5: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]
-    - claude-sonnet-5: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]
-    - claude-haiku-5-5: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]
-    - sensenova-6.8-flash-lite: ["gemini-3.5-flash-lite"]
+    - claude-opus-5-5:
+        ["gemini-3.5-flash-lite", "agnes-2.5-flash", "sensenova-6.8-flash-lite"]
+    - claude-sonnet-5:
+        ["gemini-3.5-flash-lite", "agnes-2.5-flash", "sensenova-6.8-flash-lite"]
+    - claude-haiku-5-5:
+        ["gemini-3.5-flash-lite", "agnes-2.5-flash", "sensenova-6.8-flash-lite"]
+    - sensenova-6.8-flash-lite: ["gemini-3.5-flash-lite", "agnes-2.5-flash"]
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
