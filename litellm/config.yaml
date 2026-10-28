@@ -80,7 +80,7 @@ litellm_settings:
   drop_params: true
   use_chat_completions_url_for_anthropic_messages: true
   request_timeout: 60
-  http2: true
+  http2: false
   cache: True
   cache_params:
     type: local

@@ -12,7 +12,7 @@ Routes **Claude Code** through **LiteLLM** to five providers (NVIDIA NIM, Agnes 
 - `drop_params` + `additional_drop_params` for cross-provider parameter normalization
 - Per-deployment timeouts (`timeout`, `stream_timeout`, `keepalive_seconds`) on every backend
 - `request_timeout: 60` global cap; `num_retries: 1` for faster fallback escalation
-- `http2: true` for outbound provider traffic (v1.103+)
+- `http2: false` for outbound provider traffic — required to prevent HTTP/2 mid-stream connection drops on NVIDIA NIM
 - Local response cache initialized (enabled but no call types cached — streaming SSE blocks get corrupted, disabled via `supported_call_types: []`)
 
 ---
