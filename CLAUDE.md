@@ -12,24 +12,27 @@ AI Proxy Gateway routing **Claude Code** through **LiteLLM** to NVIDIA NIM, Agne
 
 **Model aliases → provider deployments:**
 
-| Virtual Model              | Deployment 1                                                | Deployment 2                                               |
-| -------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------- |
-| `claude-opus-5-5`          | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (key 1)      | `openai/Qwen3.8-27B` (AMD Radeon)                          |
-| `claude-sonnet-5`          | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 2) | `openai/agnes-2.5-flash` (Agnes AI)                        |
-| `claude-haiku-5-5`         | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 1)  | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 2) |
-| `gemini-3.5-flash-lite`    | `gemini/gemini-3.5-flash-lite` (key 1)                      | `gemini/gemini-3.5-flash-lite` (key 2)                     |
-| `sensenova-6.8-flash-lite` | `openai/sensenova-6.8-flash-lite` (SenseNova)               | —                                                          |
+| Virtual Model              | Deployment 1                                                | Deployment 2                                                |
+| -------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
+| `claude-opus-5-5`          | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (key 1)      | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (key 2)      |
+| `claude-sonnet-5`          | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 1) | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 2) |
+| `claude-haiku-5-5`         | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 1)  | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 2)  |
+| `gemini-3.5-flash-lite`    | `gemini/gemini-3.5-flash-lite` (key 1)                      | `gemini/gemini-3.5-flash-lite` (key 2)                      |
+| `sensenova-6.8-flash-lite` | `openai/sensenova-6.8-flash-lite` (SenseNova)               | —                                                           |
+| `agnes-2.5-flash`          | `openai/agnes-2.5-flash` (Agnes AI)                         | —                                                           |
+| `qwen3.8-27b`              | `openai/Qwen3.8-27B` (AMD Radeon)                           | —                                                           |
 
 **Fallback chain (identical for all Claude aliases):**
 
-1. `gemini-3.5-flash-lite`
+1. `agnes-2.5-flash`
 2. `sensenova-6.8-flash-lite`
+3. `gemini-3.5-flash-lite`
 
-**sensenova fallback:** `sensenova-6.8-flash-lite` → `gemini-3.5-flash-lite` (added `5a3cc24`).
+**sensenova fallback:** `sensenova-6.8-flash-lite` → `agnes-2.5-flash`, `gemini-3.5-flash-lite`.
 
-**Router settings:** `routing_strategy: simple-shuffle`, `num_retries: 1`, `cooldown_time: 50`, `allowed_fails: 3`, `fallbacks` nested under `router_settings` (top-level is silently dropped).
+**Router settings:** `routing_strategy: simple-shuffle`, `num_retries: 1`, `cooldown_time: 30`, `fallbacks` nested under `router_settings` (top-level is silently dropped).
 
-**Timeouts:** `request_timeout: 60` is the global cap. Per-deployment `timeout` (20–30s) and `stream_timeout` (8–10s) are set on every deployment, so a stalled provider is cut off before the global cap binds. `keepalive_seconds: 15` on NIM deployments prevents idle-drop during thinking gaps. Local response cache is initialized (`cache: True`, `type: local`, `ttl: 300`) but no call types are cached (`supported_call_types: []`) because caching streaming SSE responses corrupts `content_block` structure (text instead of thinking). Theoretical worst case before fallback: one attempt at per-deployment `timeout` (~30s) + fallback latency ≈ 30–90s (down from ~6 min at the old 120s × 3 attempts).
+**Timeouts:** `request_timeout: 90` is the global cap; no per-deployment `timeout`/`stream_timeout`/`keepalive_seconds` are set (removed in `8fc9bfb`), so a stalled provider is cut off by the global cap. `http2: True` is re-enabled for outbound provider traffic. Local response cache is initialized (`cache: True`, `type: local`, `ttl: 300`) but no call types are cached (`supported_call_types: []`) because caching streaming SSE responses corrupts `content_block` structure (text instead of thinking). Worst case before fallback: one attempt under the 90s global cap + fallback latency.
 
 ## Key Behaviors
 

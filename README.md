@@ -7,25 +7,26 @@ Routes **Claude Code** through **LiteLLM** to five providers (NVIDIA NIM, Agnes 
 ## Features
 
 - Multi-provider virtual model routing with `simple-shuffle` load balancing
-- Cascading fallbacks: `gemini-3.5-flash-lite` → `sensenova-6.8-flash-lite`; `sensenova-6.8-flash-lite` → `gemini-3.5-flash-lite`
+- Cascading fallbacks: `claude-*` → `agnes-2.5-flash` → `sensenova-6.8-flash-lite` → `gemini-3.5-flash-lite`
 - Anthropic `/v1/messages` → OpenAI `/chat/completions` translation
 - `drop_params` + `additional_drop_params` for cross-provider parameter normalization
-- Per-deployment timeouts (`timeout`, `stream_timeout`, `keepalive_seconds`) on every backend
-- `request_timeout: 60` global cap; `num_retries: 1` for faster fallback escalation
-- `http2: false` for outbound provider traffic — required to prevent HTTP/2 mid-stream connection drops on NVIDIA NIM
+- `request_timeout: 90` global cap; `num_retries: 1` for faster fallback escalation
+- `http2: True` for outbound provider traffic
 - Local response cache initialized (enabled but no call types cached — streaming SSE blocks get corrupted, disabled via `supported_call_types: []`)
 
 ---
 
 ## Model Mapping
 
-| Virtual Model              | Deployment 1                                                       | Deployment 2                                                      |
-| -------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| `claude-opus-5-5`          | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (NVIDIA key 1)      | `openai/Qwen3.8-27B` (AMD Radeon)                                 |
-| `claude-sonnet-5`          | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (NVIDIA key 2) | `openai/agnes-2.5-flash` (Agnes AI)                               |
-| `claude-haiku-5-5`         | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (NVIDIA key 1)  | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (NVIDIA key 2) |
-| `gemini-3.5-flash-lite`    | `gemini/gemini-3.5-flash-lite` (key 1)                             | `gemini/gemini-3.5-flash-lite` (key 2)                            |
-| `sensenova-6.8-flash-lite` | `openai/sensenova-6.8-flash-lite` (SenseNova)                      | —                                                                 |
+| Virtual Model              | Deployment 1                                                       | Deployment 2                                                       |
+| -------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| `claude-opus-5-5`          | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (NVIDIA key 1)      | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (NVIDIA key 2)      |
+| `claude-sonnet-5`          | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (NVIDIA key 1) | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (NVIDIA key 2) |
+| `claude-haiku-5-5`         | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (NVIDIA key 1)  | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (NVIDIA key 2)  |
+| `gemini-3.5-flash-lite`    | `gemini/gemini-3.5-flash-lite` (key 1)                             | `gemini/gemini-3.5-flash-lite` (key 2)                             |
+| `sensenova-6.8-flash-lite` | `openai/sensenova-6.8-flash-lite` (SenseNova)                      | —                                                                  |
+| `agnes-2.5-flash`          | `openai/agnes-2.5-flash` (Agnes AI)                                | —                                                                  |
+| `qwen3.8-27b`              | `openai/Qwen3.8-27B` (AMD Radeon)                                  | —                                                                  |
 
 > `nemotron-3-ultra-550b-a55b` answers in ~300-800ms with no stall observed — the historical 700s zero-byte hang no longer reproduces.
 
