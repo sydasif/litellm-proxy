@@ -407,19 +407,23 @@ class ProxyTest:
             )
 
     # ------------------------------------------------------------------
-    # 7. Timeout enforcement (per-deployment)
+    # 7. Timeout enforcement (global cap only)
     # ------------------------------------------------------------------
     def test_timeout_config(self) -> None:
-        """Read deployment timeout settings from /v1/model/info and assert every
-        deployment has per-deployment timeout + stream_timeout set."""
+        """Read deployment settings from /v1/model/info and assert no deployment
+        carries a per-deployment timeout/stream_timeout/keepalive.
+
+        `8fc9bfb` removed them on purpose: the global `request_timeout: 90` cap
+        cuts off a stalled provider, and per-deployment overrides had
+        reintroduced mid-stream drops. A deployment-level value showing up here
+        is a regression, not a fix."""
         t0 = time.monotonic()
         code, body = _get("v1/model/info", timeout=10)
         ms = (time.monotonic() - t0) * 1000
         ok = code == 200 and isinstance(body, dict)
         deployments = body.get("data", []) if ok else []
         summary = []
-        missing_timeout = []
-        missing_stream_timeout = []
+        unexpected = []
         for d in deployments:
             name = d.get("model_name", "?")
             actual = d.get("litellm_params", {}).get("model", "?")
@@ -427,15 +431,15 @@ class ProxyTest:
             st = d.get("litellm_params", {}).get("stream_timeout", "unset")
             kk = d.get("litellm_params", {}).get("keepalive_seconds", "unset")
             summary.append(f"  {name:25s} -> {actual:45s}  timeout={t}  stream_timeout={st}  keepalive={kk}")
-            if t == "unset":
-                missing_timeout.append(actual)
-            if st == "unset":
-                missing_stream_timeout.append(actual)
-        ok = ok and not missing_timeout and not missing_stream_timeout
-        if missing_timeout:
-            summary.append(f"  MISSING timeout: {missing_timeout}")
-        if missing_stream_timeout:
-            summary.append(f"  MISSING stream_timeout: {missing_stream_timeout}")
+            if t != "unset":
+                unexpected.append(f"{actual}: timeout={t}")
+            if st != "unset":
+                unexpected.append(f"{actual}: stream_timeout={st}")
+            if kk != "unset":
+                unexpected.append(f"{actual}: keepalive_seconds={kk}")
+        ok = ok and not unexpected
+        if unexpected:
+            summary.append(f"  UNEXPECTED per-deployment timeout settings: {unexpected}")
         self.record(
             "timeout-config",
             ok,
