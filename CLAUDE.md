@@ -4,7 +4,7 @@ Guidance for working with this repository.
 
 ## Project Overview
 
-AI Proxy Gateway routing **Claude Code** through **LiteLLM** to NVIDIA NIM, Agnes AI, SenseNova, Google Gemini, AMD Radeon. Single Gunicorn worker (`--num_workers 1`), in-memory router state (no Redis/Postgres). Binds `127.0.0.1:4000` on host (container `0.0.0.0:4000`). Pinned `litellm:1.105.1`. Four Nemotron thinking-stream defects fixed upstream — no local patch, no build-time verification step.
+AI Proxy Gateway routing **Claude Code** through **LiteLLM** to NVIDIA NIM, Agnes AI, SenseNova, Google Gemini, AMD Radeon. Single Gunicorn worker (`--num_workers 1`), in-memory router state (no Redis/Postgres). Binds `127.0.0.1:4000` on host (container `0.0.0.0:4000`). Pinned `litellm:1.105.1`. Four Nemotron thinking-stream defects fixed upstream; one local patch (Gemini cache-write fail-open) is applied and gated at build time.
 
 **Single-user.** No worker pool, no autoscaling, no per-deployment `rpm`/`tpm`. Routing exists for failover/latency hygiene, not throughput.
 
@@ -34,12 +34,15 @@ AI Proxy Gateway routing **Claude Code** through **LiteLLM** to NVIDIA NIM, Agne
 
 **Timeouts:** `request_timeout: 90` is the global cap; no per-deployment `timeout`/`stream_timeout`/`keepalive_seconds` are set (removed in `8fc9bfb`), so a stalled provider is cut off by the global cap. `http2: True` is re-enabled for outbound provider traffic. Local response cache is initialized (`cache: True`, `type: local`, `ttl: 300`) but no call types are cached (`supported_call_types: []`) because caching streaming SSE responses corrupts `content_block` structure (text instead of thinking). Worst case before fallback: one attempt under the 90s global cap + fallback latency.
 
+**Gemini prompt caching:** Claude Code's `cache_control` markers still trigger an explicit `cachedContents` write for `gemini-3.5-flash-lite`. On free-tier keys the storage quota is `limit=0`, so the write is always rejected; the local patch turns that into a warning and an uncached request instead of a 429 (see "Image Pin, Streaming & Local Patches").
+
 ## Key Behaviors
 
 - `fallbacks` **must be under `router_settings`** — top-level is parsed but silently dropped by `proxy_server.load_config()`.
 - `order` **must be inside `litellm_params`** — top-level `order` is ignored by `litellm.utils._get_deployment_order`.
 - `rpm`/`tpm` at deployment top-level are promoted into `litellm_params`; not used here.
 - `additional_drop_params: ["tools[*].strict"]` on Gemini deployments strips `strict: null`.
+- Gemini cache writes are attempted for Claude Code traffic and **fail open** (local patch): a rejected or timed-out `cachedContents` write continues uncached. `disable_anthropic_gemini_context_caching_transform` is intentionally _not_ set — it would disable explicit caching on paid keys too.
 - `/health/liveliness` probes per call (no `background_health_checks`).
 - Master key auth only. No virtual keys, no database.
 
@@ -96,10 +99,10 @@ done
 
 - **API keys**: edit `.env`, restart
 - **Routing/providers**: edit `litellm/config.yaml`, restart
-- **Bump LiteLLM pin**: see "Image pin & streaming verification" — verify step gates the build
+- **Bump LiteLLM pin**: see "Image Pin, Streaming & Local Patches" — patch + gate steps decide whether the build ships
 - **Monitor**: `docker compose logs -f`
 
-## Image Pin & Streaming Verification
+## Image Pin, Streaming & Local Patches
 
 Image pinned to `docker.litellm.ai/berriai/litellm:1.105.1`. Four Nemotron thinking-stream defects fixed upstream as of this pin:
 
@@ -110,13 +113,23 @@ Image pinned to `docker.litellm.ai/berriai/litellm:1.105.1`. Four Nemotron think
 | Text in combined chunk silently dropped                                     | #34795                     |
 | `IndexError` on empty `choices`                                             | `_handle_choiceless_chunk` |
 
-The streaming verification step was removed alongside the patch scripts — the four defects are confirmed fixed in 1.105.1. If a base-image bump reintroduces them, re-add the verification gate before shipping.
+### Local patches applied at build time
+
+| Patch                        | File                                      | Invariant                                                                                                                                      |
+| ---------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Gemini cache-write fail-open | `patches/fix_gemini_context_caching.py`   | A rejected (429) or timed-out `cachedContents` write continues uncached; `tools`/`tool_choice` are restored and the full message list is sent. |
+| Build gate for the above     | `patches/verify_gemini_cache_fallback.py` | Positive control (successful write returns a cache name) plus sync 429, sync timeout, async 429 must all fail open.                            |
+
+Both run in the `Dockerfile` (`COPY patches/` → patch → verify). A `SKIP` from the patch script or a `FAIL` from the gate aborts the build — that is the signal that the base image moved and the anchors need re-targeting.
+
+The Nemotron streaming verification step was removed alongside `patches/fix_nemotron_thinking_stream.py` — those four defects are confirmed fixed in 1.105.1. If a base-image bump reintroduces them, re-add the verification gate before shipping.
 
 **On base-image bump:**
 
 ```bash
 docker compose build --no-cache litellm && docker compose up -d
-# Verify build gate passed (no SKIP/FAIL lines)
+# Verify the build gates passed: patch prints "PATCHED: 2 cache-write sites",
+# the gate prints "PASS: 4/4 cache-write cases" (no SKIP/FAIL lines)
 # Re-verify live stream:
 curl -sN 'http://localhost:4000/v1/messages?beta=true' \
   -H "Content-Type: application/json" -H "x-api-key: $LITELLM_MASTER_KEY" \
@@ -126,4 +139,6 @@ curl -sN 'http://localhost:4000/v1/messages?beta=true' \
 
 Expected: first `content_block_start` opens as `thinking`, `thinking_delta` stays in thinking block, no `IndexError`.
 
-`patches/fix_nemotron_thinking_stream.py` was removed — the four defects it addressed are fixed upstream in 1.105.1, so the local patch is no longer needed.
+For the Gemini patch, the live check is a `/v1/messages?beta=true` call to `gemini-3.5-flash-lite` with a >1024-token `cache_control` block: expect `200`, a `Gemini context cache write rejected ... continuing uncached` warning in the logs, and no `429`/`All deployments ... in cooldown`.
+
+`patches/fix_nemotron_thinking_stream.py` was removed — the four defects it addressed are fixed upstream in 1.105.1, so that local patch is no longer needed. The Gemini cache patch is still required at this pin.
