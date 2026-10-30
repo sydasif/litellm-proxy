@@ -35,12 +35,16 @@ model_list:
     litellm_params:
       model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY_1
+      rpm: 15 # free tier: 15 requests/min per project
+      tpm: 250000 # free tier: 250K tokens/min per project
       additional_drop_params: ["tools[*].strict"]
 
   - model_name: gemini-3.5-flash-lite
     litellm_params:
       model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY_2
+      rpm: 15 # free tier: 15 requests/min per project
+      tpm: 250000 # free tier: 250K tokens/min per project
       additional_drop_params: ["tools[*].strict"]
 
   - model_name: sensenova-6.8-flash-lite
@@ -79,6 +83,9 @@ router_settings:
   routing_strategy: simple-shuffle
   num_retries: 1 # one retry per deployment (2 attempts total) before fallbacks
   cooldown_time: 30 # Shorter cooldown for transient errors
+  # Enforce per-deployment rpm/tpm before the provider call. Without this hook
+  # the limits are only display values under simple-shuffle.
+  optional_pre_call_checks: ["enforce_model_rate_limits"]
 
   fallbacks:
     - claude-opus-5-5:
@@ -88,6 +95,7 @@ router_settings:
     - claude-haiku-5-5:
         ["agnes-2.5-flash", "sensenova-6.8-flash-lite", "gemini-3.5-flash-lite"]
     - sensenova-6.8-flash-lite: ["agnes-2.5-flash", "gemini-3.5-flash-lite"]
+    - gemini-3.5-flash-lite: ["agnes-2.5-flash", "sensenova-6.8-flash-lite"]
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
