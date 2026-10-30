@@ -30,17 +30,22 @@ AI Proxy Gateway routing **Claude Code** through **LiteLLM** to NVIDIA NIM, Agne
 
 **sensenova fallback:** `sensenova-6.8-flash-lite` → `agnes-2.5-flash`, `gemini-3.5-flash-lite`.
 
-**Router settings:** `routing_strategy: simple-shuffle`, `num_retries: 1`, `cooldown_time: 30`, `fallbacks` nested under `router_settings` (top-level is silently dropped).
+**Router settings:** `routing_strategy: simple-shuffle`, `num_retries: 1`, `cooldown_time: 30`, `optional_pre_call_checks: ["enforce_model_rate_limits"]`, `fallbacks` nested under `router_settings` (top-level is silently dropped).
 
 **Timeouts:** `request_timeout: 90` is the global cap; no per-deployment `timeout`/`stream_timeout`/`keepalive_seconds` are set (removed in `8fc9bfb`), so a stalled provider is cut off by the global cap. `http2: True` is re-enabled for outbound provider traffic. Local response cache is initialized (`cache: True`, `type: local`, `ttl: 300`) but no call types are cached (`supported_call_types: []`) because caching streaming SSE responses corrupts `content_block` structure (text instead of thinking). Worst case before fallback: one attempt under the 90s global cap + fallback latency.
 
 **Gemini prompt caching:** Claude Code's `cache_control` markers still trigger an explicit `cachedContents` write for `gemini-3.5-flash-lite`. On free-tier keys the storage quota is `limit=0`, so the write is always rejected; the local patch turns that into a warning and an uncached request instead of a 429 (see "Image Pin, Streaming & Local Patches").
 
+**Gemini quotas:** free tier is **15 RPM / 250K TPM / 500 RPD per project, per model**. `GEMINI_API_KEY_1` and `GEMINI_API_KEY_2` are separate Google projects, so the pair doubles each ceiling (30 RPM / 500K TPM / 1000 RPD). Each deployment therefore declares `rpm: 15` and `tpm: 250000`. Malformed-quota 429s from Google name the metric inside the body — `quotaId: ...PerProjectPerModel-FreeTier ... quotaValue: "15"` means RPM, a bare `"Resource has been exhausted"` means TPM.
+
 ## Key Behaviors
 
 - `fallbacks` **must be under `router_settings`** — top-level is parsed but silently dropped by `proxy_server.load_config()`.
 - `order` **must be inside `litellm_params`** — top-level `order` is ignored by `litellm.utils._get_deployment_order`.
-- `rpm`/`tpm` at deployment top-level are promoted into `litellm_params`; not used here.
+- `rpm`/`tpm` at deployment top-level are promoted into `litellm_params`.
+- **`rpm`/`tpm` are inert without `optional_pre_call_checks: ["enforce_model_rate_limits"]`.** `enable_pre_call_checks` filters context window and RPM only — it never reads TPM. The enforcement hook (`router_utils/pre_call_checks/model_rate_limit_check.py`) is what raises `Model rate limit exceeded` and cools the deployment.
+- The hook counts **one increment per upstream attempt**, so `num_retries: 1` spends 2 counts on a throttled request.
+- **Every model group needs a fallback entry.** `gemini-3.5-flash-lite` was a fallback target everywhere but had no target of its own, so a quota 429 went straight to the client.
 - `additional_drop_params: ["tools[*].strict"]` on Gemini deployments strips `strict: null`.
 - Gemini cache writes are attempted for Claude Code traffic and **fail open** (local patch): a rejected or timed-out `cachedContents` write continues uncached. `disable_anthropic_gemini_context_caching_transform` is intentionally _not_ set — it would disable explicit caching on paid keys too.
 - `/health/liveliness` probes per call (no `background_health_checks`).
