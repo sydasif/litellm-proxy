@@ -28,7 +28,7 @@ AI Proxy Gateway routing **Claude Code** through **LiteLLM** to NVIDIA NIM, Agne
 2. `sensenova-6.8-flash-lite`
 3. `gemini-3.5-flash-lite`
 
-**sensenova fallback:** `sensenova-6.8-flash-lite` → `agnes-2.5-flash`, `gemini-3.5-flash-lite`.
+**Fallback mesh:** every model group falls back to every other group. Order within each list is the priority (agnes first). `max_fallbacks` defaults to 5, so a full mesh (≤4 targets) terminates on its own.
 
 **Router settings:** `routing_strategy: simple-shuffle`, `num_retries: 1`, `cooldown_time: 30`, `optional_pre_call_checks: ["enforce_model_rate_limits"]`, `fallbacks` nested under `router_settings` (top-level is silently dropped).
 
@@ -45,7 +45,7 @@ AI Proxy Gateway routing **Claude Code** through **LiteLLM** to NVIDIA NIM, Agne
 - `rpm`/`tpm` at deployment top-level are promoted into `litellm_params`.
 - **`rpm`/`tpm` are inert without `optional_pre_call_checks: ["enforce_model_rate_limits"]`.** `enable_pre_call_checks` filters context window and RPM only — it never reads TPM. The enforcement hook (`router_utils/pre_call_checks/model_rate_limit_check.py`) is what raises `Model rate limit exceeded` and cools the deployment.
 - The hook counts **one increment per upstream attempt**, so `num_retries: 1` spends 2 counts on a throttled request.
-- **Every model group needs a fallback entry.** `gemini-3.5-flash-lite` was a fallback target everywhere but had no target of its own, so a quota 429 went straight to the client.
+- **Every model group needs a fallback entry.** `gemini-3.5-flash-lite` was a fallback target everywhere but had no target of its own, so a quota 429 went straight to the client. The mesh now covers all 7 groups, including `agnes-2.5-flash` and `qwen3.8-27b` which previously had none.
 - `additional_drop_params: ["tools[*].strict"]` on Gemini deployments strips `strict: null`.
 - Gemini cache writes are attempted for Claude Code traffic and **fail open** (local patch): a rejected or timed-out `cachedContents` write continues uncached. `disable_anthropic_gemini_context_caching_transform` is intentionally _not_ set — it would disable explicit caching on paid keys too.
 - `/health/liveliness` probes per call (no `background_health_checks`).
