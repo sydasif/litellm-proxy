@@ -406,6 +406,35 @@ class ProxyTest:
                 f"status={code} text={text}",
             )
 
+    def test_fallback_mesh(self) -> None:
+        """Every model group must have a fallbacks entry (mesh invariant).
+
+        `gemini-3.5-flash-lite` used to be a fallback target with no target of
+        its own, so a quota 429 went straight to the client. This guards
+        against silently re-introducing that gap."""
+        t0 = time.monotonic()
+        code, body = _get("v1/model/info", timeout=10)
+        ms = (time.monotonic() - t0) * 1000
+        groups = set()
+        if code == 200 and isinstance(body, dict):
+            for d in body.get("data", []):
+                if d.get("model_name"):
+                    groups.add(d.get("model_name"))
+        try:
+            cfg = open("litellm/config.yaml").read()
+        except OSError:
+            cfg = ""
+        import re
+        keys = set(re.findall(r"^\s*-\s+([A-Za-z0-9._-]+):\s*\[", cfg, re.M))
+        missing = sorted(g for g in groups if g not in keys)
+        ok = code == 200 and bool(groups) and not missing
+        self.record(
+            "fallback/mesh-coverage",
+            ok,
+            ms,
+            f"groups={sorted(groups)} missing_fallback={missing if missing else 'none'}",
+        )
+
     # ------------------------------------------------------------------
     # 7. Timeout enforcement (global cap only)
     # ------------------------------------------------------------------
@@ -481,6 +510,8 @@ class ProxyTest:
         self.test_streaming_fallback_models()
         print()
         self.test_fallback_chain()
+        print()
+        self.test_fallback_mesh()
         print()
         self.test_timeout_config()
 
