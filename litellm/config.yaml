@@ -2,34 +2,34 @@
 model_list:
   - model_name: claude-opus-5-5
     litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
+      model: nvidia_nim/mistralai/mistral-large-4-1t-a52b
       api_key: os.environ/NVIDIA_API_KEY_1
       rpm: 40
   - model_name: claude-opus-5-5
     litellm_params:
+      model: nvidia_nim/mistralai/mistral-large-4-1t-a52b
+      api_key: os.environ/NVIDIA_API_KEY_2
+      rpm: 40
+
+  - model_name: claude-sonnet-5
+    litellm_params:
+      model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
+      api_key: os.environ/NVIDIA_API_KEY_1
+      rpm: 40
+  - model_name: claude-sonnet-5
+    litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
       api_key: os.environ/NVIDIA_API_KEY_2
       rpm: 40
 
-  - model_name: claude-sonnet-5
+  - model_name: claude-haiku-5-5
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b
       api_key: os.environ/NVIDIA_API_KEY_1
       rpm: 40
-  - model_name: claude-sonnet-5
+  - model_name: claude-haiku-5-5
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b
-      api_key: os.environ/NVIDIA_API_KEY_2
-      rpm: 40
-
-  - model_name: claude-haiku-5-5
-    litellm_params:
-      model: nvidia_nim/mistralai/mistral-large-4-1t-a52b
-      api_key: os.environ/NVIDIA_API_KEY_1
-      rpm: 40
-  - model_name: claude-haiku-5-5
-    litellm_params:
-      model: nvidia_nim/mistralai/mistral-large-4-1t-a52b
       api_key: os.environ/NVIDIA_API_KEY_2
       rpm: 40
 
@@ -103,14 +103,14 @@ router_settings:
   optional_pre_call_checks: ["enforce_model_rate_limits"]
 
   fallbacks:
-    - claude-opus-5-5: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]
-    - claude-sonnet-5: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]
-    - claude-haiku-5-5: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]
+    - claude-opus-5-5: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite", "agnes-2.5-flash"]
+    - claude-sonnet-5: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite", "agnes-2.5-flash"]
+    - claude-haiku-5-5: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite", "agnes-2.5-flash"]
     - agnes-2.5-flash: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]
     - sensenova-6.8-flash-lite: ["gemini-3.5-flash-lite", "agnes-2.5-flash"]
     - gemini-3.5-flash-lite: ["sensenova-6.8-flash-lite", "agnes-2.5-flash"]
-    - qwen3.8-27b: ["sensenova-6.8-flash-lite", "agnes-2.5-flash"]
-    - mistral-ministral: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]
+    - qwen3.8-27b: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite", "agnes-2.5-flash"]
+    - mistral-ministral: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite", "agnes-2.5-flash"]
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
