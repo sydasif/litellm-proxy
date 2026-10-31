@@ -1,10 +1,10 @@
+# Original config.yaml content
 model_list:
   - model_name: claude-opus-5-5
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
       api_key: os.environ/NVIDIA_API_KEY_1
       rpm: 40
-
   - model_name: claude-opus-5-5
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
@@ -16,7 +16,6 @@ model_list:
       model: nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b
       api_key: os.environ/NVIDIA_API_KEY_1
       rpm: 40
-
   - model_name: claude-sonnet-5
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b
@@ -25,47 +24,48 @@ model_list:
 
   - model_name: claude-haiku-5-5
     litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b
+      model: nvidia_nim/mistralai/mistral-large-4-1t-a52b
       api_key: os.environ/NVIDIA_API_KEY_1
       rpm: 40
-
   - model_name: claude-haiku-5-5
     litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b
+      model: nvidia_nim/mistralai/mistral-large-4-1t-a52b
       api_key: os.environ/NVIDIA_API_KEY_2
       rpm: 40
-
-  # others models
 
   - model_name: gemini-3.5-flash-lite
     litellm_params:
       model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY_1
-      rpm: 15 # free tier: 15 requests/min per project
-      tpm: 250000 # free tier: 250K tokens/min per project
+      rpm: 15
+      tpm: 250000
       additional_drop_params: ["tools[*].strict"]
-
   - model_name: gemini-3.5-flash-lite
     litellm_params:
       model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY_2
-      rpm: 15 # free tier: 15 requests/min per project
-      tpm: 250000 # free tier: 250K tokens/min per project
+      rpm: 15
+      tpm: 250000
       additional_drop_params: ["tools[*].strict"]
+
+  - model_name: mistral-ministral
+    litellm_params:
+      model: mistral/ministral-3b-latest
+      api_key: os.environ/MISTRAL_API_KEY
+      rpm: 750
+      tpm: 1300000
+  - model_name: mistral-ministral
+    litellm_params:
+      model: mistral/ministral-8b-latest
+      api_key: os.environ/MISTRAL_API_KEY
+      rpm: 188
+      tpm: 625000
 
   - model_name: sensenova-6.8-flash-lite
     litellm_params:
       model: openai/sensenova-6.8-flash-lite
       api_base: https://token.sensenova.ai/v1
       api_key: os.environ/SENSENOVA_API_KEY
-      use_chat_completions_api: true
-      rpm: 20
-
-  - model_name: qwen3.8-27b
-    litellm_params:
-      model: openai/Qwen3.8-27B
-      api_base: https://developer.amd.com.cn/radeon/api/v1
-      api_key: os.environ/AMD_API_KEY
       use_chat_completions_api: true
       rpm: 20
 
@@ -77,38 +77,13 @@ model_list:
       use_chat_completions_api: true
       rpm: 10
 
-  - model_name: mistral-large-4
+  - model_name: qwen3.8-27b
     litellm_params:
-      model: nvidia_nim/mistralai/mistral-large-4-1t-a52b
-      api_key: os.environ/NVIDIA_API_KEY_1
-      rpm: 40
-
-  - model_name: mistral-large-4
-    litellm_params:
-      model: nvidia_nim/mistralai/mistral-large-4-1t-a52b
-      api_key: os.environ/NVIDIA_API_KEY_2
-      rpm: 40
-
-  - model_name: mistral-large-4
-    litellm_params:
-      model: mistral/mistral-large-4
-      api_key: os.environ/MISTRAL_API_KEY
-      rpm: 50 # free tier (verified 2026-10-31): 50 req/min
-      tpm: 20000 # free tier: 20K tokens/min
-
-  - model_name: mistral-ministral
-    litellm_params:
-      model: mistral/ministral-3b-latest
-      api_key: os.environ/MISTRAL_API_KEY
-      rpm: 750 # free tier: 750 req/min
-      tpm: 1300000 # free tier: 1.3M tokens/min
-
-  - model_name: mistral-ministral
-    litellm_params:
-      model: mistral/ministral-8b-latest
-      api_key: os.environ/MISTRAL_API_KEY
-      rpm: 188 # free tier: 188 req/min
-      tpm: 625000 # free tier: 625K tokens/min
+      model: openai/Qwen3.8-27B
+      api_base: https://developer.amd.com.cn/radeon/api/v1
+      api_key: os.environ/AMD_API_KEY
+      use_chat_completions_api: true
+      rpm: 20
 
 litellm_settings:
   drop_params: true
@@ -123,10 +98,8 @@ litellm_settings:
 
 router_settings:
   routing_strategy: simple-shuffle
-  num_retries: 1 # one retry per deployment (2 attempts total) before fallbacks
-  cooldown_time: 30 # Shorter cooldown for transient errors
-  # Enforce per-deployment rpm/tpm before the provider call. Without this hook
-  # the limits are only display values under simple-shuffle.
+  num_retries: 1
+  cooldown_time: 30
   optional_pre_call_checks: ["enforce_model_rate_limits"]
 
   fallbacks:
@@ -137,8 +110,7 @@ router_settings:
     - sensenova-6.8-flash-lite: ["gemini-3.5-flash-lite", "agnes-2.5-flash"]
     - gemini-3.5-flash-lite: ["sensenova-6.8-flash-lite", "agnes-2.5-flash"]
     - qwen3.8-27b: ["sensenova-6.8-flash-lite", "agnes-2.5-flash"]
-    - mistral-large-4: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]
-    - mistral-ministral: ["claude-haiku-5-5"]
+    - mistral-ministral: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
