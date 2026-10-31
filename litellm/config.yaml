@@ -77,6 +77,39 @@ model_list:
       use_chat_completions_api: true
       rpm: 10
 
+  - model_name: mistral-large-4
+    litellm_params:
+      model: nvidia_nim/mistralai/mistral-large-4-1t-a52b
+      api_key: os.environ/NVIDIA_API_KEY_1
+      rpm: 40
+
+  - model_name: mistral-large-4
+    litellm_params:
+      model: nvidia_nim/mistralai/mistral-large-4-1t-a52b
+      api_key: os.environ/NVIDIA_API_KEY_2
+      rpm: 40
+
+  - model_name: mistral-large-4
+    litellm_params:
+      model: mistral/mistral-large-4
+      api_key: os.environ/MISTRAL_API_KEY
+      rpm: 50 # free tier (verified 2026-10-31): 50 req/min
+      tpm: 20000 # free tier: 20K tokens/min
+
+  - model_name: mistral-ministral
+    litellm_params:
+      model: mistral/ministral-3b-latest
+      api_key: os.environ/MISTRAL_API_KEY
+      rpm: 750 # free tier: 750 req/min
+      tpm: 1300000 # free tier: 1.3M tokens/min
+
+  - model_name: mistral-ministral
+    litellm_params:
+      model: mistral/ministral-8b-latest
+      api_key: os.environ/MISTRAL_API_KEY
+      rpm: 188 # free tier: 188 req/min
+      tpm: 625000 # free tier: 625K tokens/min
+
 litellm_settings:
   drop_params: true
   use_chat_completions_url_for_anthropic_messages: true
@@ -104,6 +137,8 @@ router_settings:
     - sensenova-6.8-flash-lite: ["gemini-3.5-flash-lite", "agnes-2.5-flash"]
     - gemini-3.5-flash-lite: ["sensenova-6.8-flash-lite", "agnes-2.5-flash"]
     - qwen3.8-27b: ["sensenova-6.8-flash-lite", "agnes-2.5-flash"]
+    - mistral-large-4: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]
+    - mistral-ministral: ["claude-haiku-5-5"]
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
