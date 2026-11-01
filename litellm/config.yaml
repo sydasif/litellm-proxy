@@ -1,4 +1,3 @@
-# Original config.yaml content
 model_list:
   - model_name: claude-opus-5-5
     litellm_params:
@@ -37,35 +36,54 @@ model_list:
     litellm_params:
       model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY_1
+      additional_drop_params: ["tools[*].strict"]
       rpm: 15
       tpm: 250000
-      additional_drop_params: ["tools[*].strict"]
   - model_name: gemini-3.5-flash-lite
     litellm_params:
       model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY_2
+      additional_drop_params: ["tools[*].strict"]
       rpm: 15
       tpm: 250000
-      additional_drop_params: ["tools[*].strict"]
 
-  - model_name: mistral-ministral
+  - model_name: mistral-ministral-3b
     litellm_params:
       model: mistral/ministral-3b-latest
       api_key: os.environ/MISTRAL_API_KEY
-      rpm: 750
+      use_chat_completions_api: true
+      rpm: 30
       tpm: 1300000
-  - model_name: mistral-ministral
+
+  - model_name: mistral-ministral-8b
     litellm_params:
       model: mistral/ministral-8b-latest
       api_key: os.environ/MISTRAL_API_KEY
-      rpm: 188
+      use_chat_completions_api: true
+      rpm: 30
       tpm: 625000
+
+  - model_name: mistral-ministral-14b
+    litellm_params:
+      model: mistral/ministral-14b-latest
+      api_key: os.environ/MISTRAL_API_KEY
+      use_chat_completions_api: true
+      rpm: 30
+      tpm: 937500
 
   - model_name: sensenova-6.8-flash-lite
     litellm_params:
       model: openai/sensenova-6.8-flash-lite
       api_base: https://token.sensenova.ai/v1
       api_key: os.environ/SENSENOVA_API_KEY
+      use_chat_completions_api: true
+      rpm: 20
+
+  - model_name: qwen3.8-27b
+    litellm_params:
+      model: openai/Qwen3.8-27B
+      api_base: https://developer.amd.com.cn/radeon/api/v1
+      api_key: os.environ/AMD_API_KEY
       use_chat_completions_api: true
       rpm: 20
 
@@ -76,14 +94,6 @@ model_list:
       api_key: os.environ/AGNES_API_KEY
       use_chat_completions_api: true
       rpm: 10
-
-  - model_name: qwen3.8-27b
-    litellm_params:
-      model: openai/Qwen3.8-27B
-      api_base: https://developer.amd.com.cn/radeon/api/v1
-      api_key: os.environ/AMD_API_KEY
-      use_chat_completions_api: true
-      rpm: 20
 
 litellm_settings:
   drop_params: true
@@ -103,14 +113,12 @@ router_settings:
   optional_pre_call_checks: ["enforce_model_rate_limits"]
 
   fallbacks:
-    - claude-opus-5-5: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite", "agnes-2.5-flash"]
-    - claude-sonnet-5: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite", "agnes-2.5-flash"]
-    - claude-haiku-5-5: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite", "agnes-2.5-flash"]
-    - agnes-2.5-flash: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]
+    - claude-opus-5-5: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]
+    - claude-sonnet-5: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]
+    - claude-haiku-5-5: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]
     - sensenova-6.8-flash-lite: ["gemini-3.5-flash-lite", "agnes-2.5-flash"]
     - gemini-3.5-flash-lite: ["sensenova-6.8-flash-lite", "agnes-2.5-flash"]
-    - qwen3.8-27b: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite", "agnes-2.5-flash"]
-    - mistral-ministral: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite", "agnes-2.5-flash"]
+    - mistral-ministral-14b: ["mistral-ministral-8b", "mistral-ministral-3b"]
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
