@@ -14,11 +14,13 @@ model_list:
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
       api_key: os.environ/NVIDIA_API_KEY_1
+      stream_timeout: 10
       rpm: 40
   - model_name: claude-sonnet-5
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
       api_key: os.environ/NVIDIA_API_KEY_2
+      stream_timeout: 10
       rpm: 40
 
   - model_name: claude-haiku-5-5
@@ -98,7 +100,7 @@ model_list:
 litellm_settings:
   drop_params: true
   use_chat_completions_url_for_anthropic_messages: true
-  request_timeout: 90
+  request_timeout: 60
   http2: True
   cache: True
   cache_params:
