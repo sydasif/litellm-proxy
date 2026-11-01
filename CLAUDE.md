@@ -4,7 +4,9 @@ Guidance for working with this repository.
 
 ## Project Overview
 
-AI Proxy Gateway routing **Claude Code** through **LiteLLM** to NVIDIA NIM, Agnes AI, SenseNova, Google Gemini, AMD Radeon. Single Gunicorn worker (`--num_workers 1`), in-memory router state (no Redis/Postgres). Binds `127.0.0.1:4000` on host (container `0.0.0.0:4000`). Pinned `litellm:1.105.1`. Four Nemotron thinking-stream defects fixed upstream; one local patch (Gemini cache-write fail-open) is applied and gated at build time.
+AI Proxy Gateway routing **Claude Code** through **LiteLLM** to NVIDIA NIM (Mistral and Nemotron), Agnes AI, SenseNova, Google Gemini, and AMD Radeon. Single Gunicorn worker (`--num_workers 1`), in-memory router state (no Redis/Postgres). Binds `127.0.0.1:4000` on host (container `0.0.0.0:4000`). Pinned `litellm:1.105.1`. Four Nemotron thinking-stream defects fixed upstream; one local patch (Gemini cache-write fail-open) is applied and gated at build time.
+
+**Note**: As of this configuration, `claude-opus-5-5` now uses **Mistral** (`mistral-large-4-1t-a52b`) instead of Nemotron.
 
 **Single-user.** No worker pool, no autoscaling, no per-deployment `rpm`/`tpm`. Routing exists for failover/latency hygiene, not throughput.
 
@@ -12,23 +14,33 @@ AI Proxy Gateway routing **Claude Code** through **LiteLLM** to NVIDIA NIM, Agne
 
 **Model aliases → provider deployments:**
 
-| Virtual Model              | Deployment 1                                                | Deployment 2                                                |
-| -------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
-| `claude-opus-5-5`          | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (key 1)      | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (key 2)      |
-| `claude-sonnet-5`          | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 1) | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 2) |
-| `claude-haiku-5-5`         | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 1)  | `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` (key 2)  |
-| `gemini-3.5-flash-lite`    | `gemini/gemini-3.5-flash-lite` (key 1)                      | `gemini/gemini-3.5-flash-lite` (key 2)                      |
-| `sensenova-6.8-flash-lite` | `openai/sensenova-6.8-flash-lite` (SenseNova)               | —                                                           |
-| `agnes-2.5-flash`          | `openai/agnes-2.5-flash` (Agnes AI)                         | —                                                           |
-| `qwen3.8-27b`              | `openai/Qwen3.8-27B` (AMD Radeon)                           | —                                                           |
+| Virtual Model      | Deployment 1                                                | Deployment 2                                                |
+| ------------------ | ----------------------------------------------------------- | ----------------------------------------------------------- |
+| `claude-opus-5-5`  | `nvidia_nim/mistralai/mistral-large-4-1t-a52b` (key 1)      | `nvidia_nim/mistralai/mistral-large-4-1t-a52b` (key 2)      |
+| `claude-sonnet-5`  | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (key 1)      | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (key 2)      |
+| `claude-haiku-5-5` | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 1) | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 2) |
 
-**Fallback chain (identical for all Claude aliases):**
+**Fallback mesh:**
 
-1. `agnes-2.5-flash`
-2. `sensenova-6.8-flash-lite`
-3. `gemini-3.5-flash-lite`
-
-**Fallback mesh:** every model group falls back to every other group. Order within each list is the priority (agnes first). `max_fallbacks` defaults to 5, so a full mesh (≤4 targets) terminates on its own.
+1. `claude-opus-5-5` → `gemini-3.5-flash-lite`, `sensenova-6.8-flash-lite`
+2. `claude-sonnet-5` → `gemini-3.5-flash-lite`, `sensenova-6.8-flash-lite`
+3. `claude-haiku-5-5` → `gemini-3.5-flash-lite`, `sensenova-6.8-flash-lite`
+4. `mistral-ministral-14b` → `mistral-ministral-8b`, `mistral-ministral-3b`
+5. `sensenova-6.8-flash-lite` → `gemini-3.5-flash-lite`, `agnes-2.5-flash`
+6. `gemini-3.5-flash-lite` → `sensenova-6.8-flash-lite`, `agnes-2.5-flash`
+   | `mistral-ministral-3b` | `mistral/ministral-3b-latest` (Mistral) | —
+   | `mistral-ministral-8b` | `mistral/ministral-8b-latest` (Mistral) | —
+   | `mistral-ministral-14b` | `mistral/ministral-14b-latest` (Mistral) | —
+   **Rate Limits:**
+   | Model | RPM | TPM |
+   |---------------------------|------|--------------|
+   | `gemini-3.5-flash-lite` | 15 | 250000 |
+   | `mistral-ministral-3b` | 30 | 1300000 |
+   | `mistral-ministral-8b` | 30 | 625000 |
+   | `mistral-ministral-14b` | 30 | 937500 |
+   | `sensenova-6.8-flash-lite`| 20 | — |
+   | `agnes-2.5-flash` | 10 | — |
+   | `qwen3.8-27b` | 20 | — |
 
 **Router settings:** `routing_strategy: simple-shuffle`, `num_retries: 1`, `cooldown_time: 30`, `optional_pre_call_checks: ["enforce_model_rate_limits"]`, `fallbacks` nested under `router_settings` (top-level is silently dropped).
 
