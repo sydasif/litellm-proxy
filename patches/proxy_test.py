@@ -21,6 +21,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import sys
 import time
 from dataclasses import dataclass, field
@@ -46,13 +47,33 @@ MODEL_LIST = [
     "claude-haiku-5-5",
     "gemini-3.5-flash-lite",
     "sensenova-6.8-flash-lite",
+    "qwen3.8-27b",
 ]
+
+# Groups that are intentionally leaf nodes: standalone utility models with no
+# fallbacks entry. Every other group must have one, so an upstream 429 or
+# timeout cannot surface to the client as a 500. Adding a group without a
+# fallback means adding it here - the mesh test forces that decision.
+# A failure on a terminal group is returned to the client directly.
+TERMINAL_MODEL_GROUPS = {
+    "qwen3.8-27b",
+}
+
+# Aliases whose backend emits reasoning_content, so the Anthropic adapter opens
+# a thinking block first. claude-haiku-5-5 runs on Ministral, which does not.
+THINKING_MODELS = {
+    "claude-opus-5-5",
+    "claude-sonnet-5",
+}
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _req(method: str, path: str, body: Optional[Dict] = None, timeout: int = 30) -> Tuple[int, Any]:
+
+def _req(
+    method: str, path: str, body: Optional[Dict] = None, timeout: int = 30
+) -> Tuple[int, Any]:
     """Send an HTTP request to the proxy and return (status_code, parsed_body_or_raw)."""
     url = BASE_URL.rstrip("/") + "/" + path.lstrip("/")
     headers = {
@@ -86,9 +107,29 @@ def _post(endpoint: str, body: Dict, timeout: int = 30) -> Tuple[int, Any]:
     return _req("POST", endpoint, body=body, timeout=timeout)
 
 
+def _config_text() -> str:
+    """Read the proxy config, or '' when the harness is run outside the repo."""
+    try:
+        with open("litellm/config.yaml") as fh:
+            return fh.read()
+    except OSError:
+        return ""
+
+
+def _parse_fallbacks(cfg: str) -> Dict[str, List[str]]:
+    """Parse inline `router_settings.fallbacks` entries: `- group: [a, b]`."""
+    parsed: Dict[str, List[str]] = {}
+    for name, raw in re.findall(
+        r"^\s*-\s+([A-Za-z0-9._-]+):\s*\[([^\]]*)\]", cfg, re.M
+    ):
+        parsed[name] = [v.strip().strip("\"'") for v in raw.split(",") if v.strip()]
+    return parsed
+
+
 # ---------------------------------------------------------------------------
 # Test results
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class Result:
@@ -109,8 +150,13 @@ class Result:
 # Test suite
 # ---------------------------------------------------------------------------
 
+
 class ProxyTest:
-    def __init__(self, timeout: int = DEFAULT_TIMEOUT, stream_timeout: int = DEFAULT_STREAM_TIMEOUT):
+    def __init__(
+        self,
+        timeout: int = DEFAULT_TIMEOUT,
+        stream_timeout: int = DEFAULT_STREAM_TIMEOUT,
+    ):
         self.timeout = timeout
         self.stream_timeout = stream_timeout
         self.results: List[Result] = []
@@ -132,8 +178,15 @@ class ProxyTest:
         t0 = time.monotonic()
         code, body = _get("health/readiness", timeout=5)
         ms = (time.monotonic() - t0) * 1000
-        ok = code == 200 and (isinstance(body, dict) and body.get("status") == "healthy")
-        self.record("health/readiness", ok, ms, f"status={code} body={body if isinstance(body, str) else body.get('status')}")
+        ok = code == 200 and (
+            isinstance(body, dict) and body.get("status") == "healthy"
+        )
+        self.record(
+            "health/readiness",
+            ok,
+            ms,
+            f"status={code} body={body if isinstance(body, str) else body.get('status')}",
+        )
 
     # ------------------------------------------------------------------
     # 2. Model listing
@@ -142,12 +195,20 @@ class ProxyTest:
         t0 = time.monotonic()
         code, body = _get("v1/models", timeout=10)
         ms = (time.monotonic() - t0) * 1000
-        ids = [m["id"] for m in (body or {}).get("data", [])] if isinstance(body, dict) else []
+        ids = (
+            [m["id"] for m in (body or {}).get("data", [])]
+            if isinstance(body, dict)
+            else []
+        )
         known = set(MODEL_LIST)
         missing = known - set(ids)
         ok = code == 200 and not missing
-        self.record("v1/models lists all virtual models", ok, ms,
-                    f"status={code} found={ids} missing={missing if missing else 'none'}")
+        self.record(
+            "v1/models lists all virtual models",
+            ok,
+            ms,
+            f"status={code} found={ids} missing={missing if missing else 'none'}",
+        )
 
     # ------------------------------------------------------------------
     # 3. Deployment routing (non-streaming chat completions)
@@ -155,11 +216,15 @@ class ProxyTest:
     def test_chat_deployments(self) -> None:
         for model in MODEL_LIST:
             t0 = time.monotonic()
-            code, body = _post("v1/chat/completions", {
-                "model": model,
-                "messages": [{"role": "user", "content": "Say hi"}],
-                "max_tokens": 20,
-            }, timeout=self.timeout)
+            code, body = _post(
+                "v1/chat/completions",
+                {
+                    "model": model,
+                    "messages": [{"role": "user", "content": "Say hi"}],
+                    "max_tokens": 20,
+                },
+                timeout=self.timeout,
+            )
             ms = (time.monotonic() - t0) * 1000
 
             # Read response headers for routing metadata (requires custom HTTP headers)
@@ -172,51 +237,74 @@ class ProxyTest:
                 if choices:
                     msg = choices[0].get("message", {})
                     # For NIM/Nemotron, content may be in reasoning_content
-                    text = msg.get("content") or msg.get("reasoning_content") or "(no content)"
+                    text = (
+                        msg.get("content")
+                        or msg.get("reasoning_content")
+                        or "(no content)"
+                    )
                     self.record(
-                        f"chat/{model}", ok, ms,
-                        f"finish={choices[0].get('finish_reason')} text_len={len(text)}"
+                        f"chat/{model}",
+                        ok,
+                        ms,
+                        f"finish={choices[0].get('finish_reason')} text_len={len(text)}",
                     )
                 else:
                     self.record(f"chat/{model}", False, ms, "no choices in response")
             else:
-                self.record(f"chat/{model}", False, ms, f"non-JSON response: {str(body)[:200]}")
+                self.record(
+                    f"chat/{model}", False, ms, f"non-JSON response: {str(body)[:200]}"
+                )
 
     # ------------------------------------------------------------------
-    # 4. Streaming correctness for Claude aliases (Nemotron thinking stream)
+    # 4. Streaming correctness for Claude aliases
     # ------------------------------------------------------------------
     def test_streaming(self) -> None:
         for model in ["claude-opus-5-5", "claude-sonnet-5", "claude-haiku-5-5"]:
             t0 = time.monotonic()
-            code, body = _post("v1/messages?beta=true", {
-                "model": model,
-                "max_tokens": 50,
-                "stream": True,
-                "messages": [{"role": "user", "content": "Say hello briefly"}],
-            }, timeout=self.timeout)
+            code, body = _post(
+                "v1/messages?beta=true",
+                {
+                    "model": model,
+                    "max_tokens": 50,
+                    "stream": True,
+                    "messages": [{"role": "user", "content": "Say hello briefly"}],
+                },
+                timeout=self.timeout,
+            )
             ms = (time.monotonic() - t0) * 1000
 
             # For streaming, body may be raw SSE; parse it
             if code != 200:
-                self.record(f"stream/{model}", False, ms, f"status={code} body={str(body)[:150]}")
+                self.record(
+                    f"stream/{model}",
+                    False,
+                    ms,
+                    f"status={code} body={str(body)[:150]}",
+                )
                 continue
 
             # SSE parse
             events = self._parse_sse(body) if isinstance(body, str) else []
             block_starts = [e for e in events if e.get("type") == "content_block_start"]
-            thinking_deltas = [e for e in events if e.get("delta", {}).get("type") == "thinking_delta"]
-            text_deltas = [e for e in events if e.get("delta", {}).get("type") == "text_delta"]
+            thinking_deltas = [
+                e for e in events if e.get("delta", {}).get("type") == "thinking_delta"
+            ]
+            text_deltas = [
+                e for e in events if e.get("delta", {}).get("type") == "text_delta"
+            ]
             msg_stop = any(e.get("type") == "message_stop" for e in events)
 
-            first_type = block_starts[0].get("content_block", {}).get("type") if block_starts else None
-            total_deltas = len(thinking_deltas) + len(text_deltas)
-            ok = (
-                first_type == "thinking"
-                and total_deltas > 0
-                and msg_stop
+            first_type = (
+                block_starts[0].get("content_block", {}).get("type")
+                if block_starts
+                else None
             )
+            total_deltas = len(thinking_deltas) + len(text_deltas)
+            expected_first = "thinking" if model in THINKING_MODELS else "text"
+            ok = first_type == expected_first and total_deltas > 0 and msg_stop
             detail = (
-                f"first_block={first_type} thinking_deltas={len(thinking_deltas)} "
+                f"first_block={first_type} expected={expected_first} "
+                f"thinking_deltas={len(thinking_deltas)} "
                 f"text_deltas={len(text_deltas)} message_stop={msg_stop}"
             )
             self.record(f"stream/{model}", ok, ms, detail)
@@ -228,10 +316,10 @@ class ProxyTest:
         for line in raw.splitlines():
             line = line.strip()
             if line.startswith("event:"):
-                current_event_type = line[len("event:"):].strip()
+                current_event_type = line[len("event:") :].strip()
                 continue
             if line.startswith("data:") and current_event_type:
-                data_str = line[len("data:"):].strip()
+                data_str = line[len("data:") :].strip()
                 try:
                     data = json.loads(data_str)
                     # Normalize: attach event type so caller can query uniformly
@@ -250,11 +338,15 @@ class ProxyTest:
         t0 = time.monotonic()
         statuses = []
         for _ in range(6):
-            code, body = _post("v1/chat/completions", {
-                "model": model,
-                "messages": [{"role": "user", "content": "hi"}],
-                "max_tokens": 5,
-            }, timeout=10)
+            code, body = _post(
+                "v1/chat/completions",
+                {
+                    "model": model,
+                    "messages": [{"role": "user", "content": "hi"}],
+                    "max_tokens": 5,
+                },
+                timeout=self.timeout,
+            )
             statuses.append(code)
         ms = (time.monotonic() - t0) * 1000
         ok = all(s == 200 for s in statuses)
@@ -317,28 +409,45 @@ class ProxyTest:
             "messages": [{"role": "user", "content": "Say exactly beta"}],
             "max_tokens": 10,
         }
-        code_a, body_a_resp = _post("v1/chat/completions", dict(body_a), timeout=self.timeout)
-        code_b, body_b_resp = _post("v1/chat/completions", dict(body_b), timeout=self.timeout)
+        code_a, body_a_resp = _post(
+            "v1/chat/completions", dict(body_a), timeout=self.timeout
+        )
+        code_b, body_b_resp = _post(
+            "v1/chat/completions", dict(body_b), timeout=self.timeout
+        )
         ok = code_a == 200 and code_b == 200
-        msg_a = (body_a_resp.get("choices", [{}])[0].get("message", {}) if isinstance(body_a_resp, dict) else {})
-        msg_b = (body_b_resp.get("choices", [{}])[0].get("message", {}) if isinstance(body_b_resp, dict) else {})
-        text_a = (msg_a.get("content") or msg_a.get("reasoning_content") or "")
-        text_b = (msg_b.get("content") or msg_b.get("reasoning_content") or "")
+        msg_a = (
+            body_a_resp.get("choices", [{}])[0].get("message", {})
+            if isinstance(body_a_resp, dict)
+            else {}
+        )
+        msg_b = (
+            body_b_resp.get("choices", [{}])[0].get("message", {})
+            if isinstance(body_b_resp, dict)
+            else {}
+        )
+        text_a = msg_a.get("content") or msg_a.get("reasoning_content") or ""
+        text_b = msg_b.get("content") or msg_b.get("reasoning_content") or ""
         self.record(
             "cache/miss-on-change",
             ok,
             0,
             f"alpha='{text_a[:30]}' beta='{text_b[:30]}' (different prompts must not share cache entry)",
         )
+
     def test_messages_endpoint(self) -> None:
         """Non-streaming Anthropic /v1/messages (core Claude Code path)."""
         for model in ["claude-opus-5-5", "claude-sonnet-5", "claude-haiku-5-5"]:
             t0 = time.monotonic()
-            code, body = _post("v1/messages?beta=true", {
-                "model": model,
-                "max_tokens": 20,
-                "messages": [{"role": "user", "content": "Say hi"}],
-            }, timeout=self.timeout)
+            code, body = _post(
+                "v1/messages?beta=true",
+                {
+                    "model": model,
+                    "max_tokens": 20,
+                    "messages": [{"role": "user", "content": "Say hi"}],
+                },
+                timeout=self.timeout,
+            )
             ms = (time.monotonic() - t0) * 1000
             ok = code == 200 and isinstance(body, dict)
             detail = f"status={code}"
@@ -346,9 +455,15 @@ class ProxyTest:
                 content = body.get("content", "")
                 text = ""
                 if isinstance(content, list):
-                    text = "".join(c.get("text", "") for c in content if c.get("type") == "text")
+                    text = "".join(
+                        c.get("text", "") for c in content if c.get("type") == "text"
+                    )
                     if not text:
-                        text = "".join(c.get("thinking", "") for c in content if c.get("type") == "thinking")
+                        text = "".join(
+                            c.get("thinking", "")
+                            for c in content
+                            if c.get("type") == "thinking"
+                        )
                 else:
                     text = str(content)[:60]
                 detail += f" text_len={len(text)}"
@@ -357,11 +472,15 @@ class ProxyTest:
 
     def test_invalid_model(self) -> None:
         t0 = time.monotonic()
-        code, body = _post("v1/chat/completions", {
-            "model": "does-not-exist",
-            "messages": [{"role": "user", "content": "hi"}],
-            "max_tokens": 5,
-        }, timeout=10)
+        code, body = _post(
+            "v1/chat/completions",
+            {
+                "model": "does-not-exist",
+                "messages": [{"role": "user", "content": "hi"}],
+                "max_tokens": 5,
+            },
+            timeout=10,
+        )
         ms = (time.monotonic() - t0) * 1000
         ok = code != 200
         self.record("invalid/model", ok, ms, f"status={code} body={str(body)[:150]}")
@@ -369,34 +488,56 @@ class ProxyTest:
     def test_streaming_fallback_models(self) -> None:
         for model in ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]:
             t0 = time.monotonic()
-            code, body = _post("v1/chat/completions", {
-                "model": model,
-                "stream": True,
-                "messages": [{"role": "user", "content": "hi"}],
-                "max_tokens": 10,
-            }, timeout=self.timeout)
+            code, body = _post(
+                "v1/chat/completions",
+                {
+                    "model": model,
+                    "stream": True,
+                    "messages": [{"role": "user", "content": "hi"}],
+                    "max_tokens": 10,
+                },
+                timeout=self.timeout,
+            )
             ms = (time.monotonic() - t0) * 1000
             ok = code == 200 and isinstance(body, str)
             self.record(f"stream-fallback/{model}", ok, ms, f"status={code}")
 
     def test_fallback_chain(self) -> None:
-        """Validate that the fallback model itself responds (we can't easily
-        force primary failure without mock endpoints, so we test the fallback
-        models directly and confirm they're listed as fallbacks in the config."""
-        fallback_models = ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]
-        for fb in fallback_models:
+        """Validate every fallback target in the config answers directly.
+
+        Targets come from router_settings.fallbacks, so the check follows the
+        config instead of a hardcoded pair. We can't force a primary failure
+        without mock endpoints, so this exercises the targets themselves."""
+        targets = sorted(
+            {t for vals in _parse_fallbacks(_config_text()).values() for t in vals}
+        )
+        if not targets:
+            self.record(
+                "fallback/config-targets",
+                False,
+                0,
+                "no fallback targets parsed from litellm/config.yaml",
+            )
+            return
+        for fb in targets:
             t0 = time.monotonic()
-            code, body = _post("v1/chat/completions", {
-                "model": fb,
-                "messages": [{"role": "user", "content": "Say ok"}],
-                "max_tokens": 10,
-            }, timeout=15)
+            code, body = _post(
+                "v1/chat/completions",
+                {
+                    "model": fb,
+                    "messages": [{"role": "user", "content": "Say ok"}],
+                    "max_tokens": 10,
+                },
+                timeout=self.timeout,
+            )
             ms = (time.monotonic() - t0) * 1000
             ok = code == 200 and isinstance(body, dict) and bool(body.get("choices"))
             text = ""
             if ok:
                 try:
-                    text = (body["choices"][0]["message"].get("content") or "").strip()[:60]
+                    text = (body["choices"][0]["message"].get("content") or "").strip()[
+                        :60
+                    ]
                 except (KeyError, IndexError):
                     pass
             self.record(
@@ -407,11 +548,12 @@ class ProxyTest:
             )
 
     def test_fallback_mesh(self) -> None:
-        """Every model group must have a fallbacks entry (mesh invariant).
+        """Every non-terminal model group must have a fallbacks entry.
 
         `gemini-3.5-flash-lite` used to be a fallback target with no target of
-        its own, so a quota 429 went straight to the client. This guards
-        against silently re-introducing that gap."""
+        its own, so a quota 429 went straight to the client. Groups declared in
+        TERMINAL_MODEL_GROUPS are standalone utilities that intentionally
+        surface errors directly; everything else must be routed somewhere."""
         t0 = time.monotonic()
         code, body = _get("v1/model/info", timeout=10)
         ms = (time.monotonic() - t0) * 1000
@@ -420,20 +562,17 @@ class ProxyTest:
             for d in body.get("data", []):
                 if d.get("model_name"):
                     groups.add(d.get("model_name"))
-        try:
-            cfg = open("litellm/config.yaml").read()
-        except OSError:
-            cfg = ""
-        import re
-        keys = set(re.findall(r"^\s*-\s+([A-Za-z0-9._-]+):\s*\[", cfg, re.M))
-        missing = sorted(g for g in groups if g not in keys)
-        ok = code == 200 and bool(groups) and not missing
-        self.record(
-            "fallback/mesh-coverage",
-            ok,
-            ms,
-            f"groups={sorted(groups)} missing_fallback={missing if missing else 'none'}",
+        configured = set(_parse_fallbacks(_config_text()))
+        missing = sorted(groups - configured - TERMINAL_MODEL_GROUPS)
+        stale = sorted(TERMINAL_MODEL_GROUPS - groups)
+        ok = code == 200 and bool(groups) and not missing and not stale
+        detail = (
+            f"groups={sorted(groups)} terminal={sorted(TERMINAL_MODEL_GROUPS)} "
+            f"missing_fallback={missing if missing else 'none'}"
         )
+        if stale:
+            detail += f" stale_terminal={stale}"
+        self.record("fallback/mesh-coverage", ok, ms, detail)
 
     # ------------------------------------------------------------------
     # 7. Timeout enforcement (global cap only)
@@ -459,7 +598,9 @@ class ProxyTest:
             t = d.get("litellm_params", {}).get("timeout", "unset")
             st = d.get("litellm_params", {}).get("stream_timeout", "unset")
             kk = d.get("litellm_params", {}).get("keepalive_seconds", "unset")
-            summary.append(f"  {name:25s} -> {actual:45s}  timeout={t}  stream_timeout={st}  keepalive={kk}")
+            summary.append(
+                f"  {name:25s} -> {actual:45s}  timeout={t}  stream_timeout={st}  keepalive={kk}"
+            )
             if t != "unset":
                 unexpected.append(f"{actual}: timeout={t}")
             if st != "unset":
@@ -468,7 +609,9 @@ class ProxyTest:
                 unexpected.append(f"{actual}: keepalive_seconds={kk}")
         ok = ok and not unexpected
         if unexpected:
-            summary.append(f"  UNEXPECTED per-deployment timeout settings: {unexpected}")
+            summary.append(
+                f"  UNEXPECTED per-deployment timeout settings: {unexpected}"
+            )
         self.record(
             "timeout-config",
             ok,
@@ -532,19 +675,35 @@ class ProxyTest:
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Proxy verification and optimization test harness")
-    parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT,
-                        help=f"Global request timeout in seconds (default: {DEFAULT_TIMEOUT})")
-    parser.add_argument("--stream-timeout", type=int, default=DEFAULT_STREAM_TIMEOUT,
-                        help=f"Streaming first-chunk timeout in seconds (default: {DEFAULT_STREAM_TIMEOUT})")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Print configuration without making network requests")
+    parser = argparse.ArgumentParser(
+        description="Proxy verification and optimization test harness"
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=DEFAULT_TIMEOUT,
+        help=f"Global request timeout in seconds (default: {DEFAULT_TIMEOUT})",
+    )
+    parser.add_argument(
+        "--stream-timeout",
+        type=int,
+        default=DEFAULT_STREAM_TIMEOUT,
+        help=f"Streaming first-chunk timeout in seconds (default: {DEFAULT_STREAM_TIMEOUT})",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print configuration without making network requests",
+    )
     args = parser.parse_args()
 
     if args.dry_run:
         print(f"PROXY_URL      = {BASE_URL}")
-        print(f"LITELLM_MASTER_KEY = {'*' * 8}{MASTER_KEY[-4:] if len(MASTER_KEY) > 4 else ''}")
+        print(
+            f"LITELLM_MASTER_KEY = {'*' * 8}{MASTER_KEY[-4:] if len(MASTER_KEY) > 4 else ''}"
+        )
         print(f"TEST_TIMEOUT   = {args.timeout}s")
         print(f"TEST_STREAM_TIMEOUT = {args.stream_timeout}s")
         print(f"MODELS         = {MODEL_LIST}")
