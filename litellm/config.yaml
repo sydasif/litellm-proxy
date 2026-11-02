@@ -12,25 +12,31 @@ model_list:
 
   - model_name: claude-sonnet-5
     litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
+      model: nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b
       api_key: os.environ/NVIDIA_API_KEY_1
       rpm: 40
   - model_name: claude-sonnet-5
     litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
+      model: nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b
       api_key: os.environ/NVIDIA_API_KEY_2
       rpm: 40
 
   - model_name: claude-haiku-5-5
     litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b
-      api_key: os.environ/NVIDIA_API_KEY_1
-      rpm: 40
+      model: mistral/ministral-14b-latest
+      api_key: os.environ/MISTRAL_API_KEY
+      use_chat_completions_api: true
+      rpm: 30
+      tpm: 937500
+      weight: 1
   - model_name: claude-haiku-5-5
     litellm_params:
-      model: nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b
-      api_key: os.environ/NVIDIA_API_KEY_2
-      rpm: 40
+      model: mistral/ministral-3b-latest
+      api_key: os.environ/MISTRAL_API_KEY
+      use_chat_completions_api: true
+      rpm: 750
+      tpm: 1300000
+      weight: 0
 
   - model_name: gemini-3.5-flash-lite
     litellm_params:
@@ -47,30 +53,6 @@ model_list:
       rpm: 15
       tpm: 250000
 
-  - model_name: mistral-ministral-3b
-    litellm_params:
-      model: mistral/ministral-3b-latest
-      api_key: os.environ/MISTRAL_API_KEY
-      use_chat_completions_api: true
-      rpm: 30
-      tpm: 1300000
-
-  - model_name: mistral-ministral-8b
-    litellm_params:
-      model: mistral/ministral-8b-latest
-      api_key: os.environ/MISTRAL_API_KEY
-      use_chat_completions_api: true
-      rpm: 30
-      tpm: 625000
-
-  - model_name: mistral-ministral-14b
-    litellm_params:
-      model: mistral/ministral-14b-latest
-      api_key: os.environ/MISTRAL_API_KEY
-      use_chat_completions_api: true
-      rpm: 30
-      tpm: 937500
-
   - model_name: sensenova-6.8-flash-lite
     litellm_params:
       model: openai/sensenova-6.8-flash-lite
@@ -78,6 +60,15 @@ model_list:
       api_key: os.environ/SENSENOVA_API_KEY
       use_chat_completions_api: true
       rpm: 20
+      weight: 1
+  - model_name: sensenova-6.8-flash-lite
+    litellm_params:
+      model: openai/agnes-2.5-flash
+      api_base: https://apihub.agnes-ai.com/v1
+      api_key: os.environ/AGNES_API_KEY
+      use_chat_completions_api: true
+      rpm: 10
+      weight: 0
 
   - model_name: qwen3.8-27b
     litellm_params:
@@ -87,19 +78,11 @@ model_list:
       use_chat_completions_api: true
       rpm: 20
 
-  - model_name: agnes-2.5-flash
-    litellm_params:
-      model: openai/agnes-2.5-flash
-      api_base: https://apihub.agnes-ai.com/v1
-      api_key: os.environ/AGNES_API_KEY
-      use_chat_completions_api: true
-      rpm: 10
-
 litellm_settings:
   drop_params: true
   use_chat_completions_url_for_anthropic_messages: true
-  request_timeout: 60
-  http2: false
+  request_timeout: 90
+  http2: True
   cache: true
   cache_params:
     type: local
@@ -116,9 +99,8 @@ router_settings:
     - claude-opus-5-5: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]
     - claude-sonnet-5: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]
     - claude-haiku-5-5: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]
-    - sensenova-6.8-flash-lite: ["gemini-3.5-flash-lite", "agnes-2.5-flash"]
-    - gemini-3.5-flash-lite: ["sensenova-6.8-flash-lite", "agnes-2.5-flash"]
-    - mistral-ministral-14b: ["mistral-ministral-8b", "mistral-ministral-3b"]
+    - sensenova-6.8-flash-lite: ["gemini-3.5-flash-lite"]
+    - gemini-3.5-flash-lite: ["sensenova-6.8-flash-lite"]
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
