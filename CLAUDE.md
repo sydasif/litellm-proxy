@@ -8,7 +8,7 @@ AI Proxy Gateway routing **Claude Code** through **LiteLLM** to NVIDIA NIM (Mist
 
 **Note**: As of this configuration, `claude-opus-5-5` now uses **Mistral** (`mistral-large-4-1t-a52b`) instead of Nemotron.
 
-**Single-user.** No worker pool, no autoscaling, no per-deployment `rpm`/`tpm`. Routing exists for failover/latency hygiene, not throughput.
+**Single-user.** No worker pool, no autoscaling. Per-deployment `rpm`/`tpm` are set as safety caps and as routing weights for `simple-shuffle`. Routing exists for failover/latency hygiene, not throughput.
 
 ## Architecture
 
@@ -17,30 +17,33 @@ AI Proxy Gateway routing **Claude Code** through **LiteLLM** to NVIDIA NIM (Mist
 | Virtual Model      | Deployment 1                                                | Deployment 2                                                |
 | ------------------ | ----------------------------------------------------------- | ----------------------------------------------------------- |
 | `claude-opus-5-5`  | `nvidia_nim/mistralai/mistral-large-4-1t-a52b` (key 1)      | `nvidia_nim/mistralai/mistral-large-4-1t-a52b` (key 2)      |
-| `claude-sonnet-5`  | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (key 1)      | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (key 2)      |
-| `claude-haiku-5-5` | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 1) | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 2) |
+| `claude-sonnet-5`  | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 1) | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (key 2) |
+| `claude-haiku-5-5` | `mistral/ministral-14b-latest` (weight 1)                   | `mistral/ministral-3b-latest` (weight 0, overflow)          |
 
 **Fallback mesh:**
 
 1. `claude-opus-5-5` → `gemini-3.5-flash-lite`, `sensenova-6.8-flash-lite`
 2. `claude-sonnet-5` → `gemini-3.5-flash-lite`, `sensenova-6.8-flash-lite`
 3. `claude-haiku-5-5` → `gemini-3.5-flash-lite`, `sensenova-6.8-flash-lite`
-4. `mistral-ministral-14b` → `mistral-ministral-8b`, `mistral-ministral-3b`
-5. `sensenova-6.8-flash-lite` → `gemini-3.5-flash-lite`, `agnes-2.5-flash`
-6. `gemini-3.5-flash-lite` → `sensenova-6.8-flash-lite`, `agnes-2.5-flash`
-   | `mistral-ministral-3b` | `mistral/ministral-3b-latest` (Mistral) | —
-   | `mistral-ministral-8b` | `mistral/ministral-8b-latest` (Mistral) | —
-   | `mistral-ministral-14b` | `mistral/ministral-14b-latest` (Mistral) | —
-   **Rate Limits:**
-   | Model | RPM | TPM |
-   |---------------------------|------|--------------|
-   | `gemini-3.5-flash-lite` | 15 | 250000 |
-   | `mistral-ministral-3b` | 30 | 1300000 |
-   | `mistral-ministral-8b` | 30 | 625000 |
-   | `mistral-ministral-14b` | 30 | 937500 |
-   | `sensenova-6.8-flash-lite`| 20 | — |
-   | `agnes-2.5-flash` | 10 | — |
-   | `qwen3.8-27b` | 20 | — |
+4. `sensenova-6.8-flash-lite` → `gemini-3.5-flash-lite`
+5. `gemini-3.5-flash-lite` → `sensenova-6.8-flash-lite`
+
+`qwen3.8-27b` is terminal: no fallback, errors surface directly.
+
+**Utility slot routing:** `sensenova-6.8-flash-lite` is a single slot with two deployments — SenseNova (`weight: 1`) and Agnes (`weight: 0`, overflow). SenseNova is the reliable one: 4/4 clean Anthropic tool-path trials, 3/3 clean tool round-trips, but slow (1.6–2.8 s simple, 7.8–10.6 s with a tool result). Agnes is ~3× faster but flakier (2/5 trials returned a duplicate `tool_use` block; 1/5 leaked raw `<tool_call>` XML after a tool result) and caps at 10 rpm, so it only serves when SenseNova's 20 rpm is exhausted. Without `weight`, `rpm` becomes the weight and 33% of traffic would land on Agnes.
+
+**Haiku routing:** `simple-shuffle` checks `weight` before `rpm`, so 14b takes all traffic and 3b is used only when 14b is filtered out (30 rpm cap or unhealthy). Without an explicit `weight`, the `rpm` values become the weights (30:750 would send 96% to 3b). Ministral emits no `reasoning_content`, so haiku streams carry no `thinking` block. 3b ignores exact-format instructions (measured 0/3) while 14b follows them (3/3), which is why 3b is overflow-only.
+
+**Rate Limits:**
+
+| Model                                  | RPM | TPM     |
+| -------------------------------------- | --- | ------- |
+| `gemini-3.5-flash-lite`                | 15  | 250000  |
+| `claude-haiku-5-5` (14b)               | 30  | 937500  |
+| `claude-haiku-5-5` (3b)                | 750 | 1300000 |
+| `sensenova-6.8-flash-lite` (SenseNova) | 20  | —       |
+| `sensenova-6.8-flash-lite` (Agnes)     | 10  | —       |
+| `qwen3.8-27b`                          | 20  | —       |
 
 **Router settings:** `routing_strategy: simple-shuffle`, `num_retries: 1`, `cooldown_time: 30`, `optional_pre_call_checks: ["enforce_model_rate_limits"]`, `fallbacks` nested under `router_settings` (top-level is silently dropped).
 
@@ -56,8 +59,8 @@ AI Proxy Gateway routing **Claude Code** through **LiteLLM** to NVIDIA NIM (Mist
 - `order` **must be inside `litellm_params`** — top-level `order` is ignored by `litellm.utils._get_deployment_order`.
 - `rpm`/`tpm` at deployment top-level are promoted into `litellm_params`.
 - **`rpm`/`tpm` are inert without `optional_pre_call_checks: ["enforce_model_rate_limits"]`.** `enable_pre_call_checks` filters context window and RPM only — it never reads TPM. The enforcement hook (`router_utils/pre_call_checks/model_rate_limit_check.py`) is what raises `Model rate limit exceeded` and cools the deployment.
-- The hook counts **one increment per upstream attempt**, so `num_retries: 1` spends 2 counts on a throttled request.
-- **Every model group needs a fallback entry.** `gemini-3.5-flash-lite` was a fallback target everywhere but had no target of its own, so a quota 429 went straight to the client. The mesh now covers all 7 groups, including `agnes-2.5-flash` and `qwen3.8-27b` which previously had none.
+- The hook counts **one increment per upstream attempt**, so `num_retries: 1` spends 2 counts on a throttled request. The request that crosses a deployment's rpm cap is already picked when it is rejected, so it falls back once; the sibling deployment serves from the next request onward.
+- **Every model group needs a fallback entry.** `gemini-3.5-flash-lite` was a fallback target everywhere but had no target of its own, so a quota 429 went straight to the client. The mesh now covers all 6 groups; only `qwen3.8-27b` is intentionally terminal.
 - `additional_drop_params: ["tools[*].strict"]` on Gemini deployments strips `strict: null`.
 - Gemini cache writes are attempted for Claude Code traffic and **fail open** (local patch): a rejected or timed-out `cachedContents` write continues uncached. `disable_anthropic_gemini_context_caching_transform` is intentionally _not_ set — it would disable explicit caching on paid keys too.
 - `/health/liveliness` probes per call (no `background_health_checks`).

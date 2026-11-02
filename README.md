@@ -7,7 +7,7 @@ Routes **Claude Code** through **LiteLLM** to five providers (NVIDIA NIM, Agnes 
 ## Features
 
 - Multi-provider virtual model routing with `simple-shuffle` load balancing
- - Cascading fallback mesh: `claude-*` → `gemini-3.5-flash-lite`/`sensenova-6.8-flash-lite`; `mistral-ministral-*` → `mistral-ministral-8b`/`mistral-ministral-3b`; `agnes-2.5-flash`/`qwen3.8-27b` included in mesh
+- Cascading fallback mesh: `claude-*` → `gemini-3.5-flash-lite`/`sensenova-6.8-flash-lite`; `sensenova-6.8-flash-lite` → `gemini-3.5-flash-lite` (SenseNova primary, Agnes overflow); `qwen3.8-27b` is terminal
 - Anthropic `/v1/messages` → OpenAI `/chat/completions` translation
 - `drop_params` + `additional_drop_params` for cross-provider parameter normalization
 - `request_timeout: 90` global cap; `num_retries: 1` for faster fallback escalation
@@ -18,16 +18,14 @@ Routes **Claude Code** through **LiteLLM** to five providers (NVIDIA NIM, Agnes 
 
 ## Model Mapping
 
-| Virtual Model              | Deployment 1                                                       | Deployment 2                                                       |
-| -------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
-| `claude-opus-5-5`          | `nvidia_nim/mistralai/mistral-large-4-1t-a52b` (NVIDIA key 1)      | `nvidia_nim/mistralai/mistral-large-4-1t-a52b` (NVIDIA key 2)      |
-| `claude-sonnet-5`          | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (NVIDIA key 1) | `nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b` (NVIDIA key 2) |
-| `claude-haiku-5-5`         | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (NVIDIA key 1)  | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (NVIDIA key 2)  |
-
----
-| `mistral-ministral-3b`      | `mistral/ministral-3b-latest` (Mistral)                          | —
-| `mistral-ministral-8b`      | `mistral/ministral-8b-latest` (Mistral)                          | —
-| `mistral-ministral-14b`     | `mistral/ministral-14b-latest` (Mistral)                         | —
+| Virtual Model      | Deployment 1                                                       | Deployment 2                                                       |
+| ------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| `claude-opus-5-5`  | `nvidia_nim/mistralai/mistral-large-4-1t-a52b` (NVIDIA key 1)      | `nvidia_nim/mistralai/mistral-large-4-1t-a52b` (NVIDIA key 2)      |
+| `claude-sonnet-5`  | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (NVIDIA key 1) | `nvidia_nim/nvidia/nemotron-3.5-super-vl-120b-a12b` (NVIDIA key 2) |
+| `claude-haiku-5-5` | `mistral/ministral-14b-latest` (weight 1)                          | `mistral/ministral-3b-latest` (weight 0, overflow)                 |
+| `gemini-3.5-flash-lite` | `gemini/gemini-3.5-flash-lite` (GEMINI key 1) | `gemini/gemini-3.5-flash-lite` (GEMINI key 2) |
+| `sensenova-6.8-flash-lite` | `openai/sensenova-6.8-flash-lite` (SenseNova, weight 1) | `openai/agnes-2.5-flash` (Agnes, weight 0, overflow) |
+| `qwen3.8-27b` | `openai/Qwen3.8-27B` (AMD Radeon) | — |
 
 ## Setup
 
