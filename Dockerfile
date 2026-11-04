@@ -28,3 +28,5 @@ FROM docker.litellm.ai/berriai/litellm:1.105.1
 COPY patches/ /app/patches/
 RUN python3 /app/patches/fix_gemini_context_caching.py
 RUN python3 /app/patches/verify_gemini_cache_fallback.py
+RUN python3 /app/patches/fix_pass_through_tool_choice_string.py
+RUN python3 /app/patches/verify_pass_through_tool_choice.py

@@ -470,6 +470,45 @@ class ProxyTest:
                 ok = ok and bool(text)
             self.record(f"messages/{model}", ok, ms, detail)
 
+    def test_messages_string_tool_choice(self) -> None:
+        """Claude Code /v1/messages with a string tool_choice ("required").
+
+        Regression guard for the pass_through adapter 500
+        ("string indices must be integers, not 'str'"): a string
+        tool_choice must be normalized, not indexed as a dict."""
+        tool = {
+            "type": "function",
+            "function": {
+                "name": "get_weather",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"city": {"type": "string"}},
+                    "required": ["city"],
+                },
+            },
+        }
+        for model in ["claude-haiku-5-5", "sensenova-6.8-flash-lite", "gemini-3.5-flash-lite"]:
+            t0 = time.monotonic()
+            code, body = _post(
+                "v1/messages?beta=true",
+                {
+                    "model": model,
+                    "max_tokens": 20,
+                    "messages": [{"role": "user", "content": "weather in Tokyo?"}],
+                    "tools": [tool],
+                    "tool_choice": "required",
+                },
+                timeout=self.timeout,
+            )
+            ms = (time.monotonic() - t0) * 1000
+            ok = code == 200 and isinstance(body, dict)
+            self.record(
+                f"messages-tool-choice/{model}",
+                ok,
+                ms,
+                f"status={code} body={str(body)[:120]}",
+            )
+
     def test_invalid_model(self) -> None:
         t0 = time.monotonic()
         code, body = _post(
@@ -647,6 +686,8 @@ class ProxyTest:
         self.test_cache_miss_on_change()
         print()
         self.test_messages_endpoint()
+        print()
+        self.test_messages_string_tool_choice()
         print()
         self.test_invalid_model()
         print()

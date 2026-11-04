@@ -139,6 +139,8 @@ Image pinned to `docker.litellm.ai/berriai/litellm:1.105.1`. Four Nemotron think
 | ---------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | Gemini cache-write fail-open | `patches/fix_gemini_context_caching.py`   | A rejected (429) or timed-out `cachedContents` write continues uncached; `tools`/`tool_choice` are restored and the full message list is sent. |
 | Build gate for the above     | `patches/verify_gemini_cache_fallback.py` | Positive control (successful write returns a cache name) plus sync 429, sync timeout, async 429 must all fail open.                            |
+| Pass-through string tool_choice | `patches/fix_pass_through_tool_choice_string.py` | Claude Code `/v1/messages` with string `tool_choice` ("required"/"auto"/"none") normalizes before dict indexing instead of 500ing with "string indices must be integers". |
+| Build gate for the above        | `patches/verify_pass_through_tool_choice.py`     | String tool_choice maps to expected OpenAI value; dict tool_choice path unchanged. |
 
 Both run in the `Dockerfile` (`COPY patches/` → patch → verify). A `SKIP` from the patch script or a `FAIL` from the gate aborts the build — that is the signal that the base image moved and the anchors need re-targeting.
 
