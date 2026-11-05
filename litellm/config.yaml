@@ -49,14 +49,6 @@ model_list:
       tpm: 1300000
       weight: 0
 
-  - model_name: codestral-latest
-    litellm_params:
-      model: mistral/codestral-latest
-      api_key: os.environ/MISTRAL_API_KEY
-      use_chat_completions_api: true
-      rpm: 125
-      tpm: 625,000
-
   - model_name: gemini-3.5-flash-lite
     litellm_params:
       model: gemini/gemini-3.5-flash-lite
