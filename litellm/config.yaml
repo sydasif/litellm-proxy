@@ -32,7 +32,7 @@ model_list:
       api_key: os.environ/NVIDIA_API_KEY_2
       rpm: 40
 
-  - model_name: mistral-14b-latest
+  - model_name: mistral-14b-latest # tiny model
     litellm_params:
       model: mistral/ministral-14b-latest
       api_key: os.environ/MISTRAL_API_KEY
@@ -40,7 +40,7 @@ model_list:
       rpm: 30
       tpm: 937500
       weight: 1
-  - model_name: mistral-14b-latest
+  - model_name: mistral-14b-latest # tiny model
     litellm_params:
       model: mistral/ministral-3b-latest
       api_key: os.environ/MISTRAL_API_KEY
@@ -49,14 +49,14 @@ model_list:
       tpm: 1300000
       weight: 0
 
-  - model_name: gemini-3.5-flash-lite
+  - model_name: gemini-3.5-flash-lite # fallback model
     litellm_params:
       model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY_1
       additional_drop_params: ["tools[*].strict"]
       rpm: 15
       tpm: 250000
-  - model_name: gemini-3.5-flash-lite
+  - model_name: gemini-3.5-flash-lite # fallback model
     litellm_params:
       model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY_2
@@ -64,24 +64,23 @@ model_list:
       rpm: 15
       tpm: 250000
 
-  - model_name: sensenova-6.8-flash-lite
+  - model_name: sensenova-6.8-flash-lite # hermes main model
     litellm_params:
       model: openai/sensenova-6.8-flash-lite
       api_base: https://token.sensenova.ai/v1
       api_key: os.environ/SENSENOVA_API_KEY
       use_chat_completions_api: true
       rpm: 20
-      weight: 1
-  - model_name: sensenova-6.8-flash-lite
+
+  - model_name: agnes-2.5-flash # omp adviser model
     litellm_params:
       model: openai/agnes-2.5-flash
       api_base: https://apihub.agnes-ai.com/v1
       api_key: os.environ/AGNES_API_KEY
       use_chat_completions_api: true
       rpm: 10
-      weight: 0
 
-  - model_name: qwen3.8-27b
+  - model_name: qwen3.8-27b # planning model
     litellm_params:
       model: openai/Qwen3.8-27B
       api_base: https://developer.amd.com.cn/radeon/api/v1
@@ -112,6 +111,7 @@ router_settings:
     - claude-haiku-5-5: ["gemini-3.5-flash-lite", "sensenova-6.8-flash-lite"]
     - sensenova-6.8-flash-lite: ["gemini-3.5-flash-lite"]
     - gemini-3.5-flash-lite: ["sensenova-6.8-flash-lite"]
+    - agnes-2.5-flash: ["claude-haiku-5-5", "gemini-3.5-flash-lite"]
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
